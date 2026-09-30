@@ -93,7 +93,7 @@ export function gripsFor(app: App, e: Entity, style: GripStyle): Grip[] {
         { key: 'c', anchor: e.c, offset: knobs ? { x: -20, y: -20 } : { x: 0, y: 0 }, kind: 'move', apply: (t) => ({ ...e, c: t }) },
       ];
     }
-    case 'stroke':
+    default:
       return [];
   }
 }

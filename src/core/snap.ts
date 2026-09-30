@@ -84,7 +84,7 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
       }
     }
     // Curves passing close to the pointer: candidates for intersections and for "on the curve".
-    if (e.kind !== 'stroke') {
+    if (e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc') {
       const pr = project(e, p);
       if (pr.d <= radius) {
         if (opts.int) near.push(e);
@@ -144,5 +144,12 @@ export function keyPoints(e: Entity): Vec[] {
       return [e.c, ...[0, 1, 2, 3].map((k) => arcPoint(e.c, e.r, (k * Math.PI) / 2))];
     case 'arc':
       return [...arcEnds(e), e.c, arcPoint(e.c, e.r, e.start + e.sweep / 2)];
+    case 'dim':
+      return [e.p1, e.p2];
+    case 'datum':
+    case 'gtol':
+      return [e.at, e.p];
+    case 'hatch':
+      return [];
   }
 }

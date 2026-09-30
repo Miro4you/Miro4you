@@ -315,6 +315,10 @@ export class SketchDocument {
           case 'arc':
             // Angles need more precision than millimetres.
             return { ...e, c: rv(e.c), r: round(e.r), start: Math.round(e.start * 1e7) / 1e7, sweep: Math.round(e.sweep * 1e7) / 1e7 };
+          case 'hatch':
+            return { ...e, loops: e.loops.map((l) => l.map(round)) };
+          default:
+            return e;
         }
       });
     return {
@@ -381,6 +385,12 @@ export function validateFile(data: unknown): DocFile {
     else if (e.kind === 'stroke' && Array.isArray(e.pts) && e.pts.length >= 4 && e.pts.every(isNum)) entities.push(e);
     else if (e.kind === 'circle' && isVec(e.c) && isNum(e.r) && e.r > 0) entities.push(e);
     else if (e.kind === 'arc' && isVec(e.c) && isNum(e.r) && e.r > 0 && isNum(e.start) && isNum(e.sweep) && e.sweep !== 0) {
+      entities.push(e);
+    } else if (e.kind === 'hatch' && Array.isArray(e.loops) && e.loops.every((l) => Array.isArray(l) && l.length >= 6 && l.every(isNum))) {
+      entities.push(e);
+    } else if (e.kind === 'dim' && isVec(e.p1) && isVec(e.p2) && isNum(e.off)) {
+      entities.push(e);
+    } else if ((e.kind === 'datum' || e.kind === 'gtol') && isVec(e.at) && isVec(e.p)) {
       entities.push(e);
     }
   }

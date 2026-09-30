@@ -59,7 +59,85 @@ export interface ArcEntity extends EntityBase {
   mark?: boolean;
 }
 
-export type Entity = LineEntity | StrokeEntity | CircleEntity | ArcEntity;
+/** Hatch patterns (DIN ISO 128-50 / DIN 201 style). */
+export type HatchPattern = 'diag' | 'diag2' | 'cross' | 'steel' | 'plastic' | 'dots';
+
+/** Hatched area: closed loops (outer outline and holes, even-odd). */
+export interface HatchEntity extends EntityBase {
+  kind: 'hatch';
+  /** Flat point lists [x0, y0, x1, y1, …] of closed loops in mm. */
+  loops: number[][];
+  pattern: HatchPattern;
+  /** Extra rotation of the pattern in degrees (world, clockwise on screen). */
+  angle: number;
+  /** Line spacing in mm. */
+  spacing: number;
+}
+
+/**
+ * Dimension (DIN 406 / ISO 129):
+ * - lin: distance p1–p2 measured along direction `dir` (radians), dimension line
+ *   offset by `off` mm along the normal of dir from p1;
+ * - dia: diameter of the circle with centre p1 through p2 (direction of the line);
+ * - rad: radius from centre p1 to p2;
+ * - ang: angle at vertex p1 between rays to p2 and p3, arc radius `off`.
+ */
+export interface DimEntity extends EntityBase {
+  kind: 'dim';
+  type: 'lin' | 'dia' | 'rad' | 'ang';
+  p1: Vec;
+  p2: Vec;
+  p3?: Vec;
+  dir?: number;
+  off: number;
+  /** Text instead of the measured value. */
+  text?: string;
+}
+
+export type GpsSymbol =
+  | 'straightness'
+  | 'flatness'
+  | 'circularity'
+  | 'cylindricity'
+  | 'profileLine'
+  | 'profileSurface'
+  | 'parallelism'
+  | 'perpendicularity'
+  | 'angularity'
+  | 'position'
+  | 'concentricity'
+  | 'symmetry'
+  | 'runout'
+  | 'totalRunout';
+
+/** Datum feature symbol (ISO 5459): filled triangle on the feature at `at`, letter frame at `p`. */
+export interface DatumEntity extends EntityBase {
+  kind: 'datum';
+  at: Vec;
+  p: Vec;
+  letter: string;
+}
+
+/** Geometrical tolerance frame (ISO 1101) at `p`, leader with arrow to the feature at `at`. */
+export interface GtolEntity extends EntityBase {
+  kind: 'gtol';
+  at: Vec;
+  p: Vec;
+  sym: GpsSymbol;
+  value: string;
+  /** Tolerance zone is a diameter (Ø before the value). */
+  dia: boolean;
+  datums: string[];
+}
+
+export type Entity = LineEntity | StrokeEntity | CircleEntity | ArcEntity | HatchEntity | DimEntity | DatumEntity | GtolEntity;
+
+/** Annotations don't take part in trimming, erasing or geometric snapping. */
+export type Annotation = HatchEntity | DimEntity | DatumEntity | GtolEntity;
+
+export function isAnnotation(e: Entity): e is Annotation {
+  return e.kind === 'hatch' || e.kind === 'dim' || e.kind === 'datum' || e.kind === 'gtol';
+}
 
 export interface Layer {
   id: string;

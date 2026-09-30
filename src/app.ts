@@ -5,7 +5,7 @@ import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from 
 import { DEFAULT_STYLE, PAPER_COLORS, setPenTheme, type Theme } from './core/pens';
 import { findSnap, snapAngle, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import { mirrorGroup, transformEntity, type Affine } from './core/transform';
-import type { Entity, LineEntity, Style } from './core/types';
+import type { Entity, HatchPattern, LineEntity, Style } from './core/types';
 import { ACCENT, drawMirrorToggle, formatAngle, formatLength } from './render/overlay';
 import { Painter } from './render/painter';
 import { SceneRenderer } from './render/scene';
@@ -15,13 +15,16 @@ import { CircleTool } from './tools/circle';
 import { CrossTool } from './tools/cross';
 import { DeleteTool } from './tools/delete';
 import { EraserTool } from './tools/eraser';
+import { DimTool } from './tools/dim';
+import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
+import { HatchTool } from './tools/hatch';
 import { LineTool } from './tools/line';
 import { SelectTool } from './tools/select';
 import type { PointerKind, Tool } from './tools/tool';
 import { TrimTool } from './tools/trim';
 
-export type ToolId = 'select' | 'freehand' | 'line' | 'circle' | 'arc' | 'cross' | 'delete' | 'trim' | 'erase';
+export type ToolId = 'select' | 'freehand' | 'line' | 'circle' | 'arc' | 'cross' | 'delete' | 'trim' | 'erase' | 'hatch' | 'dim' | 'gps';
 
 export interface Settings {
   grid: boolean;
@@ -43,6 +46,13 @@ export interface Settings {
   /** Freehand smoothing: length of the lazy string in CSS px (0 = off). */
   stabilizer: number;
   theme: 'system' | 'light' | 'dark';
+  hatchPattern: HatchPattern;
+  /** Hatch line spacing in mm. */
+  hatchSpacing: number;
+  /** Gaps up to this size (mm) still close an area for hatching. */
+  hatchGap: number;
+  /** GPS tool: place datum symbols or tolerance frames. */
+  gpsMode: 'datum' | 'gtol';
 }
 
 /** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
@@ -67,7 +77,20 @@ const DEFAULT_SETTINGS: Settings = {
   angleStep: 5,
   stabilizer: 0,
   theme: 'system',
+  hatchPattern: 'diag',
+  hatchSpacing: 2,
+  hatchGap: 1.5,
+  gpsMode: 'datum',
 };
+
+/**
+ * Whether new drawing of this kind is mirrored at active axes. Axes themselves are
+ * not (that would multiply them), nor are dimensions and GPS symbols.
+ */
+function mirrorable(e: Entity): boolean {
+  if (e.kind === 'line' && e.axis) return false;
+  return e.kind !== 'dim' && e.kind !== 'datum' && e.kind !== 'gtol';
+}
 
 interface Widget {
   p: Vec;
@@ -131,6 +154,9 @@ export class App {
       delete: new DeleteTool(this),
       trim: new TrimTool(this),
       erase: new EraserTool(this),
+      hatch: new HatchTool(this),
+      dim: new DimTool(this),
+      gps: new GpsTool(this),
     };
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
     this.toolId = savedTool in this.tools ? savedTool : 'line';
@@ -351,7 +377,8 @@ export class App {
       const m = r + e.style.width / 2;
       if (world.x < bx.minX - m || world.x > bx.maxX + m || world.y < bx.minY - m || world.y > bx.maxY + m) continue;
       const pr = project(e, world);
-      const d = Math.max(0, pr.d - e.style.width / 2);
+      // Inside a hatch counts as a weak hit so lines within it still win.
+      const d = e.kind === 'hatch' ? Math.max(r * 0.9, pr.d) : Math.max(0, pr.d - e.style.width / 2);
       // Later (upper) entities win ties.
       if (d <= r && (!best || d <= best.d)) best = { e, d, s: pr.s };
     }
@@ -389,8 +416,7 @@ export class App {
     this.doc.begin();
     for (const e of entities) {
       this.doc.add(e);
-      // Axes themselves are not mirrored (that would multiply the axes).
-      if (e.kind === 'line' && e.axis) continue;
+      if (!mirrorable(e)) continue;
       for (const c of this.mirrorCopies(e)) this.doc.add({ ...c, z: this.doc.allocZ() });
     }
     this.doc.commit();
@@ -648,7 +674,7 @@ export class App {
   paintWorld(e: Entity): void {
     const p = this.worldPainter();
     p.draw(e);
-    if (!(e.kind === 'line' && e.axis)) for (const c of this.mirrorCopies(e, true)) p.draw(c, 0.55);
+    if (mirrorable(e)) for (const c of this.mirrorCopies(e, true)) p.draw(c, 0.55);
     this.screenSpace();
   }
 

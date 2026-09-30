@@ -1,6 +1,7 @@
 import type { App, ToolId } from '../app';
 import { formatWidth, INK_WIDTHS, LINE_TYPES, PEN_NAMES, PENCIL_WIDTHS } from '../core/pens';
-import type { LineType, PenKind } from '../core/types';
+import type { HatchPattern, LineType, PenKind } from '../core/types';
+import { HATCH_NAMES } from '../render/annotations';
 import { loadPref, savePref } from '../storage/idb';
 import { icons, lineTypeIcon } from './icons';
 import { h } from './dom';
@@ -32,6 +33,27 @@ const LINE_DASH: Record<LineType, string> = {
 
 
 type ShapeId = 'line' | 'circle' | 'arc' | 'arc-center' | 'cross';
+type AnnoId = 'hatch' | 'dim' | 'datum' | 'gtol';
+
+const ANNOS: { id: AnnoId; title: string; icon: string }[] = [
+  { id: 'hatch', title: 'Schraffur: in geschlossene Fläche tippen (H)', icon: icons.hatch },
+  { id: 'dim', title: 'Bemaßung: von Punkt zu Punkt ziehen oder Element antippen (D)', icon: icons.dimension },
+  { id: 'datum', title: 'Bezug (A, B, …): auf Kante drücken und wegziehen (P)', icon: icons.datum },
+  { id: 'gtol', title: 'Form- und Lagetoleranz: auf Element drücken und Rahmen wegziehen', icon: icons.gtol },
+];
+
+/** Tiny preview of a hatch pattern. */
+function hatchIcon(p: HatchPattern): string {
+  const lines: Record<HatchPattern, string> = {
+    diag: '<path d="M3 13 13 3M3 21 21 3M11 21l10-10"/>',
+    diag2: '<path d="M3 11l10 10M3 3l18 18M11 3l10 10"/>',
+    cross: '<path d="M3 13 13 3M3 21 21 3M11 21l10-10M3 11l10 10M3 3l18 18M11 3l10 10"/>',
+    steel: '<path d="M3 11 11 3M3 13.5 13.5 3M3 21 21 3M5.5 21 21 5.5"/>',
+    plastic: '<path d="M3 13 13 3M11 21l10-10"/><path d="M3 21 21 3" stroke-dasharray="3 2"/>',
+    dots: '<g fill="currentColor" stroke="none"><circle cx="7" cy="7" r="1.1"/><circle cx="17" cy="7" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="7" cy="17" r="1.1"/><circle cx="17" cy="17" r="1.1"/></g>',
+  };
+  return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1.5" stroke-width="1.1" opacity=".55"/>${lines[p]}</svg>`;
+}
 type EraseId = 'delete' | 'trim' | 'erase';
 
 const SHAPES: { id: ShapeId; tool: ToolId; title: string; icon: string }[] = [
@@ -55,6 +77,10 @@ export class Palette {
   private freeBtn: HTMLButtonElement;
   private shapeBtn: HTMLButtonElement;
   private eraseBtn: HTMLButtonElement;
+  private annoBtn: HTMLButtonElement;
+  private annoItems = new Map<AnnoId, HTMLButtonElement>();
+  private hatchItems = new Map<string, HTMLButtonElement>();
+  private lastAnno: AnnoId = loadPref<{ id: AnnoId }>('lastAnno', { id: 'dim' }).id;
   private penBtn: HTMLButtonElement;
   private lineBtn: HTMLButtonElement;
   private colorBtn: HTMLButtonElement;
@@ -140,6 +166,56 @@ export class Palette {
       else this.pickErase(this.lastErase);
     });
 
+    // Annotation group: hatch, dimension, GPS symbols (+ hatch options).
+    this.annoBtn = btn('Schraffur, Bemaßung, GPS-Symbole', icons.dimension);
+    const toolRow = h('div', { class: 'fly-tools' });
+    const annoFly: Flyout = new Flyout([toolRow], side, 'fly-wide');
+    for (const a of ANNOS) {
+      const b = item(a.title, a.icon, () => this.pickAnno(a.id), () => annoFly);
+      this.annoItems.set(a.id, b);
+      toolRow.append(b);
+    }
+    const patRow = h('div', { class: 'seg seg-icons' });
+    for (const p of Object.keys(HATCH_NAMES) as HatchPattern[]) {
+      const b = h('button', { class: 'seg-btn', title: HATCH_NAMES[p], 'aria-label': HATCH_NAMES[p], html: hatchIcon(p), 'data-item': '1' });
+      b.addEventListener('click', () => {
+        app.updateSettings({ hatchPattern: p });
+        this.pickAnno('hatch');
+      });
+      this.hatchItems.set(`p:${p}`, b);
+      patRow.append(b);
+    }
+    const spaceRow = h('div', { class: 'seg' });
+    for (const sp of [1, 2, 3, 5]) {
+      const b = h('button', { class: 'seg-btn', text: `${sp} mm`, 'data-item': '1' });
+      b.addEventListener('click', () => {
+        app.updateSettings({ hatchSpacing: sp });
+        this.pickAnno('hatch');
+      });
+      this.hatchItems.set(`s:${sp}`, b);
+      spaceRow.append(b);
+    }
+    const gapRow = h('div', { class: 'seg' });
+    for (const g of [0.5, 1.5, 3, 6]) {
+      const b = h('button', { class: 'seg-btn', text: `${String(g).replace('.', ',')} mm`, 'data-item': '1' });
+      b.addEventListener('click', () => app.updateSettings({ hatchGap: g }));
+      this.hatchItems.set(`g:${g}`, b);
+      gapRow.append(b);
+    }
+    annoFly.el.append(
+      h('div', { class: 'fly-title', text: 'Schraffur' }),
+      patRow,
+      h('div', { class: 'fly-title', text: 'Abstand' }),
+      spaceRow,
+      h('div', { class: 'fly-title', text: 'Lücken schließen bis' }),
+      gapRow,
+      h('div', { class: 'fly-hint', text: 'Antippen einer vorhandenen Schraffur übernimmt Muster und Abstand.' }),
+    );
+    annoFly.attach(this.annoBtn, () => {
+      if (this.activeAnno() !== null) annoFly.toggle(this.annoBtn);
+      else this.pickAnno(this.lastAnno);
+    });
+
     // Pens.
     this.penBtn = h('button', { class: 'chip pen-trigger', title: 'Stift wählen (1–9)', 'aria-label': 'Stift' });
     const pencils = h('div', { class: 'pen-row' }, [h('span', { class: 'row-label', text: 'Bleistift' })]);
@@ -207,7 +283,7 @@ export class Palette {
     this.undoBtn.addEventListener('click', () => app.undo());
     this.redoBtn.addEventListener('click', () => app.redo());
 
-    this.flyouts = [freeFly, shapeFly, eraseFly, penFly, lineFly, angleFly];
+    this.flyouts = [freeFly, shapeFly, eraseFly, annoFly, penFly, lineFly, angleFly];
 
     const grip = h('div', { class: 'grip', title: 'Ziehen zum Verschieben · Doppeltippen: quer/hoch', html: icons.grip });
     const collapse = h('button', { class: 'btn collapse', title: 'Einklappen' });
@@ -220,7 +296,7 @@ export class Palette {
     const group = (...els: HTMLElement[]) => h('div', { class: 'group' }, els);
     const sep = () => h('div', { class: 'sep' });
     const body = h('div', { class: 'pal-body' }, [
-      group(this.selectBtn, this.freeBtn, this.shapeBtn, this.eraseBtn),
+      group(this.selectBtn, this.freeBtn, this.shapeBtn, this.annoBtn, this.eraseBtn),
       sep(),
       group(this.penBtn, this.lineBtn, this.colorBtn),
       sep(),
@@ -260,6 +336,24 @@ export class Palette {
     savePref('lastShape', { id });
   }
 
+  /** Active annotation tool, if any. */
+  private activeAnno(): AnnoId | null {
+    const t = this.app.toolId;
+    if (t === 'hatch' || t === 'dim') return t;
+    if (t === 'gps') return this.app.settings.gpsMode;
+    return null;
+  }
+
+  private pickAnno(id: AnnoId): void {
+    if (id === 'datum' || id === 'gtol') {
+      this.app.updateSettings({ gpsMode: id });
+      this.app.setTool('gps');
+    } else this.app.setTool(id);
+    this.lastAnno = id;
+    savePref('lastAnno', { id });
+    this.update();
+  }
+
   private pickErase(id: EraseId): void {
     this.app.setTool(id);
     this.lastErase = id;
@@ -285,6 +379,14 @@ export class Palette {
     this.eraseBtn.innerHTML = ERASERS.find((e) => e.id === erase)!.icon;
     this.eraseBtn.classList.toggle('active', ERASERS.some((e) => e.id === toolId));
     for (const [id, b] of this.eraseItems) b.classList.toggle('active', id === toolId);
+
+    const anno = this.activeAnno();
+    this.annoBtn.innerHTML = ANNOS.find((a) => a.id === (anno ?? this.lastAnno))!.icon;
+    this.annoBtn.classList.toggle('active', anno !== null);
+    for (const [id, b] of this.annoItems) b.classList.toggle('active', id === anno);
+    for (const [k, b] of this.hatchItems) {
+      b.classList.toggle('active', k === `p:${settings.hatchPattern}` || k === `s:${settings.hatchSpacing}` || k === `g:${settings.hatchGap}`);
+    }
 
     this.penBtn.className = `chip pen-trigger ${style.pen}`;
     this.penBtn.replaceChildren(this.penDot(style.pen, style.width), h('span', { class: 'cap', text: formatWidth(style.width) }));

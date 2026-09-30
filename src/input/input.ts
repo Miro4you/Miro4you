@@ -367,6 +367,9 @@ export class InputController {
       } else if (k === 's') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('app:download'));
+      } else if (k === 'e' && e.shiftKey) {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent('app:export'));
       } else if (k === 'o') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('app:open'));
@@ -444,6 +447,15 @@ export class InputController {
         break;
       case 'l':
         app.setTool('line');
+        break;
+      case 'h':
+        app.setTool('hatch');
+        break;
+      case 'd':
+        app.setTool('dim');
+        break;
+      case 'p':
+        app.setTool('gps');
         break;
       case 's':
         app.updateSettings({ snap: !app.settings.snap });

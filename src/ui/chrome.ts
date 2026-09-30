@@ -223,7 +223,7 @@ export class Menu {
 
   constructor(
     private app: App,
-    actions: { newDrawing: () => void; open: () => void; download: () => void; help: () => void },
+    actions: { newDrawing: () => void; open: () => void; download: () => void; exportFile: () => void; help: () => void },
   ) {
     const item = (label: string, fn: () => void, hint = '') => {
       const b = h('button', { class: 'menu-item', role: 'menuitem' }, [h('span', { text: label }), h('kbd', { text: hint })]);
@@ -255,6 +255,7 @@ export class Menu {
       item('Neue Zeichnung', actions.newDrawing),
       item('Datei öffnen …', actions.open, '⌘O'),
       item('Datei herunterladen', actions.download, '⌘S'),
+      item('Exportieren (PDF, SVG, PNG, JPEG) …', actions.exportFile, '⇧⌘E'),
       h('div', { class: 'menu-sep' }),
       h('div', { class: 'menu-label', text: 'Darstellung' }),
       themeRow,
@@ -312,6 +313,9 @@ export function helpDialog(): HTMLDialogElement {
     ['Werkzeuggruppe: nochmal tippen, lange drücken oder mit dem Pencil darüber schweben', 'Auswahl der Gruppe öffnen'],
     ['Strich-Punkt-Linie', 'Wird automatisch Symmetrieachse (Knopf am Ende schaltet Spiegeln)'],
     ['X · T · E', 'Objekt löschen · Trimmen · Radierer'],
+    ['H', 'Schraffur: in eine geschlossene Fläche tippen (kleine Lücken werden überbrückt)'],
+    ['D', 'Bemaßung: Punkt zu Punkt ziehen, dann Maßlinie platzieren · Linie/Kreis/Bogen antippen · zwei Linien = Winkel'],
+    ['P', 'GPS: Bezug oder Toleranzrahmen – auf Element drücken und wegziehen'],
     ['Bogen am Linienende', 'Tangential weiterzeichnen (runde Ecke)'],
     ['Auswahl: antippen / Schlinge', 'Objekte hinzufügen oder entfernen / einkreisen'],
     ['Auswahl ziehen · Drehknopf', 'Verschieben mit Fang · Drehen'],
@@ -322,7 +326,7 @@ export function helpDialog(): HTMLDialogElement {
     ['S · A · G', 'Fang · Winkelmodus · Raster'],
     ['0 · R', 'Alles zeigen · Ansicht gerade'],
     ['⌘Z · ⇧⌘Z', 'Rückgängig · Wiederholen'],
-    ['⌘S · ⌘O', 'Herunterladen · Öffnen'],
+    ['⌘S · ⌘O · ⇧⌘E', 'Herunterladen · Öffnen · Exportieren'],
     ['Esc', 'Aktion abbrechen'],
   ];
   const close = h('button', { class: 'btn', title: 'Schließen', html: icons.close });

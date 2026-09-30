@@ -1084,3 +1084,117 @@ dialog.ask::backdrop {
 :root[data-theme='dark'] .sw.active {
   box-shadow: 0 0 0 2px var(--panel-solid), 0 0 0 4px var(--accent);
 }
+
+/* ---- phase 3: tolerance frame dialog, export dialog --------------------------------------- */
+
+dialog.gtol-dlg {
+  width: min(400px, calc(100% - 32px));
+}
+
+.sym-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.sym-btn {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--field);
+  cursor: pointer;
+}
+
+.sym-btn[aria-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft, rgba(43, 99, 230, 0.12));
+}
+
+.sym-name {
+  margin: 6px 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.gtol-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.gtol-dia {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.gtol-field {
+  display: block;
+  flex: 1;
+  margin-top: 8px;
+}
+
+.gtol-field > span,
+.exp-field > span {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gtol-datums.muted {
+  opacity: 0.5;
+}
+
+.flyout.fly-wide:has(.fly-tools) {
+  width: 272px;
+}
+
+.fly-tools {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+
+.fly-tools .btn {
+  flex: 1;
+}
+
+.seg-icons .seg-btn {
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+canvas.sym-canvas {
+  position: static;
+  display: block;
+  touch-action: auto;
+}
+
+.flyout .seg-btn {
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+dialog.export-dlg {
+  width: min(380px, calc(100% - 32px));
+}
+
+.exp-field {
+  margin-top: 12px;
+}
+
+.exp-field > span {
+  margin-bottom: 4px;
+}
+
+p.exp-hint {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+}

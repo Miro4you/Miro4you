@@ -1,3 +1,6 @@
+import { GPS_NAMES, GPS_NEEDS_DATUM, symbolLayout } from '../core/annotations';
+import type { GpsSymbol } from '../core/types';
+import { drawLayout } from '../render/annotations';
 import { h } from './dom';
 
 /**
@@ -13,7 +16,7 @@ interface AskOptions {
   danger?: boolean;
 }
 
-function baseDialog(title: string): { dlg: HTMLDialogElement; body: HTMLElement; actions: HTMLElement } {
+export function baseDialog(title: string): { dlg: HTMLDialogElement; body: HTMLElement; actions: HTMLElement } {
   const body = h('div', { class: 'dlg-body' });
   const actions = h('div', { class: 'dlg-actions' });
   const dlg = h('dialog', { class: 'panel ask' }, [h('h2', { class: 'dlg-title', text: title }), body, actions]);
@@ -21,7 +24,7 @@ function baseDialog(title: string): { dlg: HTMLDialogElement; body: HTMLElement;
   return { dlg, body, actions };
 }
 
-function finish<T>(dlg: HTMLDialogElement, resolve: (v: T) => void, value: T): void {
+export function finish<T>(dlg: HTMLDialogElement, resolve: (v: T) => void, value: T): void {
   dlg.close();
   dlg.remove();
   resolve(value);
@@ -45,9 +48,11 @@ export function ask(opts: AskOptions): Promise<boolean> {
   });
 }
 
-export function askText(title: string, value: string, confirm = 'Übernehmen'): Promise<string | null> {
+/** Text input; resolves null on cancel. Empty input gives null too unless `allowEmpty`. */
+export function askText(title: string, value: string, confirm = 'Übernehmen', hint?: string, allowEmpty = false): Promise<string | null> {
   return new Promise((resolve) => {
     const { dlg, body, actions } = baseDialog(title);
+    if (hint) body.append(h('p', { text: hint }));
     const input = h('input', { class: 'dlg-input', type: 'text', id: 'dlg-text', autocomplete: 'off' });
     input.value = value;
     const form = h('form', { method: 'dialog' }, [input]);
@@ -57,7 +62,7 @@ export function askText(title: string, value: string, confirm = 'Übernehmen'): 
     actions.append(cancel, ok);
     const submit = () => {
       const v = input.value.trim();
-      finish(dlg, resolve, v ? v : null);
+      finish(dlg, resolve, v || allowEmpty ? v : null);
     };
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -72,5 +77,113 @@ export function askText(title: string, value: string, confirm = 'Übernehmen'): 
     dlg.showModal();
     input.focus();
     input.select();
+  });
+}
+
+export interface GtolSpec {
+  sym: GpsSymbol;
+  value: string;
+  dia: boolean;
+  datums: string[];
+}
+
+const GPS_ORDER: GpsSymbol[] = [
+  'straightness',
+  'flatness',
+  'circularity',
+  'cylindricity',
+  'profileLine',
+  'profileSurface',
+  'parallelism',
+  'perpendicularity',
+  'angularity',
+  'position',
+  'concentricity',
+  'symmetry',
+  'runout',
+  'totalRunout',
+];
+
+/** Small canvas showing a characteristic symbol (drawn like on the drawing). */
+export function symbolCanvas(sym: GpsSymbol, size = 28): HTMLCanvasElement {
+  const c = h('canvas', { class: 'sym-canvas', 'aria-hidden': 'true' });
+  const dpr = window.devicePixelRatio || 1;
+  c.width = size * dpr;
+  c.height = size * dpr;
+  c.style.width = `${size}px`;
+  c.style.height = `${size}px`;
+  const ctx = c.getContext('2d');
+  if (ctx) {
+    const k = (size * dpr) / 5.2;
+    ctx.setTransform(k, 0, 0, k, (size * dpr) / 2, (size * dpr) / 2);
+    const color = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#222';
+    drawLayout(ctx, symbolLayout(sym), color, 0.28, 1);
+  }
+  return c;
+}
+
+/** Tolerance frame editor: characteristic, value, Ø and datums. */
+export function askGtol(initial: GtolSpec, confirm = 'Einfügen'): Promise<GtolSpec | null> {
+  return new Promise((resolve) => {
+    const { dlg, body, actions } = baseDialog('Form- und Lagetoleranz');
+    dlg.classList.add('gtol-dlg');
+    let sym = initial.sym;
+    const grid = h('div', { class: 'sym-grid', role: 'radiogroup' });
+    const name = h('div', { class: 'sym-name' });
+    const buttons = new Map<GpsSymbol, HTMLButtonElement>();
+    const refresh = () => {
+      for (const [s, b] of buttons) b.setAttribute('aria-checked', String(s === sym));
+      name.textContent = GPS_NAMES[sym];
+      datumRow.classList.toggle('muted', !GPS_NEEDS_DATUM[sym]);
+    };
+    for (const s of GPS_ORDER) {
+      const b = h('button', { class: 'sym-btn', role: 'radio', title: GPS_NAMES[s], 'aria-label': GPS_NAMES[s] }, [symbolCanvas(s)]);
+      b.addEventListener('click', () => {
+        sym = s;
+        if (!GPS_NEEDS_DATUM[s]) datums.value = '';
+        refresh();
+      });
+      buttons.set(s, b);
+      grid.append(b);
+    }
+    const dia = h('input', { type: 'checkbox', id: 'gtol-dia' });
+    dia.checked = initial.dia;
+    const value = h('input', { class: 'dlg-input', type: 'text', id: 'gtol-value', inputmode: 'decimal', autocomplete: 'off', placeholder: '0,05' });
+    value.value = initial.value;
+    const datums = h('input', { class: 'dlg-input', type: 'text', id: 'gtol-datums', autocomplete: 'off', placeholder: 'z. B. A B' });
+    datums.value = initial.datums.join(' ');
+    const valueRow = h('div', { class: 'gtol-row' }, [
+      h('label', { class: 'gtol-dia', for: 'gtol-dia' }, [dia, 'Ø']),
+      h('label', { class: 'gtol-field' }, [h('span', { text: 'Toleranz' }), value]),
+    ]);
+    const datumRow = h('label', { class: 'gtol-field gtol-datums' }, [h('span', { text: 'Bezüge' }), datums]);
+    const form = h('form', { method: 'dialog' }, [valueRow, datumRow]);
+    body.append(grid, name, form);
+    refresh();
+    const cancel = h('button', { class: 'dlg-btn', text: 'Abbrechen' });
+    const ok = h('button', { class: 'dlg-btn primary', text: confirm });
+    actions.append(cancel, ok);
+    const submit = () => {
+      const v = value.value.trim().replace('.', ',');
+      const ds = datums.value
+        .toUpperCase()
+        .split(/[\s,;|/-]+/)
+        .filter(Boolean)
+        .slice(0, 3);
+      finish(dlg, resolve, { sym, value: v || '0,1', dia: dia.checked, datums: ds });
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      submit();
+    });
+    ok.addEventListener('click', submit);
+    cancel.addEventListener('click', () => finish(dlg, resolve, null));
+    dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      finish(dlg, resolve, null);
+    });
+    dlg.showModal();
+    value.focus();
+    value.select();
   });
 }

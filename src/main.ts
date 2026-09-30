@@ -6,6 +6,7 @@ import { h } from './ui/dom';
 import { ask } from './ui/dialogs';
 import { Palette } from './ui/palette';
 import { SelectionBar } from './ui/selectionbar';
+import { showExportDialog } from './ui/export-dialog';
 
 const root = document.getElementById('app')!;
 const sceneCanvas = h('canvas', { class: 'scene' });
@@ -78,6 +79,7 @@ async function newDrawing(): Promise<void> {
 }
 
 document.addEventListener('app:download', download);
+document.addEventListener('app:export', () => showExportDialog(app));
 document.addEventListener('app:open', open);
 
 // ---- UI -------------------------------------------------------------------------------
@@ -86,7 +88,7 @@ const toast = new Toast();
 app.setToast((m) => toast.show(m));
 const help = helpDialog();
 const layers = new LayersPanel(app);
-const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, help: () => help.showModal() });
+const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, exportFile: () => showExportDialog(app), help: () => help.showModal() });
 const viewBar = new ViewBar(app, layers, menu);
 const palette = new Palette(app);
 const selectionBar = new SelectionBar(app);

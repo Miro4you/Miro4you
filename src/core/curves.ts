@@ -9,7 +9,38 @@ import {
   type Box,
   type Vec,
 } from './geom';
-import type { ArcEntity, Entity } from './types';
+import { layoutAnno, layoutSegments } from './annotations';
+import { isAnnotation, type Annotation, type ArcEntity, type Entity } from './types';
+
+/** Outline segments of an annotation (hatch loops, dimension lines, frames, text boxes). */
+export function annoSegments(e: Annotation): [Vec, Vec][] {
+  if (e.kind !== 'hatch') return layoutSegments(layoutAnno(e));
+  const out: [Vec, Vec][] = [];
+  for (const loop of e.loops) {
+    const n = loop.length / 2;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      out.push([
+        { x: loop[i * 2], y: loop[i * 2 + 1] },
+        { x: loop[j * 2], y: loop[j * 2 + 1] },
+      ]);
+    }
+  }
+  return out;
+}
+
+/** Point inside a hatch (even-odd over all loops)? */
+export function insideHatch(loops: number[][], p: Vec): boolean {
+  let inside = false;
+  for (const loop of loops) {
+    const n = loop.length / 2;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = loop[i * 2], yi = loop[i * 2 + 1], xj = loop[j * 2], yj = loop[j * 2 + 1];
+      if (yi > p.y !== yj > p.y && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
 
 /**
  * Geometry of entities as curves parametrised by arc length s ∈ [0, length]:
@@ -132,6 +163,11 @@ export function geomPoly(e: Entity): Poly {
       p = chordPoly(raw);
       break;
     }
+    default: {
+      const raw: number[] = [];
+      for (const [a, b] of annoSegments(e)) raw.push(a.x, a.y, b.x, b.y);
+      p = chordPoly(raw.length ? raw : [0, 0, 0, 0]);
+    }
   }
   polyCache.set(e, p);
   return p;
@@ -151,6 +187,8 @@ export function entityLength(e: Entity): number {
       const p = geomPoly(e);
       return p.s[p.s.length - 1];
     }
+    default:
+      return 0;
   }
 }
 
@@ -193,6 +231,8 @@ export function pointAt(e: Entity, s: number): Vec {
       return arcPoint(e.c, e.r, e.start + Math.sign(e.sweep || 1) * (s / e.r));
     case 'stroke':
       return polyPointAt(geomPoly(e), s);
+    default:
+      return polyPointAt(geomPoly(e), 0);
   }
 }
 
@@ -230,6 +270,16 @@ export function project(e: Entity, p: Vec): { s: number; point: Vec; d: number }
         const c = closestOnSegment(p, a, b);
         const d = dist(p, c.point);
         if (d < best.d) best = { s: poly.s[j] + c.t * (poly.s[j + 1] - poly.s[j]), point: c.point, d };
+      }
+      return best;
+    }
+    default: {
+      if (e.kind === 'hatch' && insideHatch(e.loops, p)) return { s: 0, point: p, d: 0 };
+      let best = { s: 0, point: p, d: Infinity };
+      for (const [a, b] of annoSegments(e)) {
+        const c = closestOnSegment(p, a, b);
+        const d = dist(p, c.point);
+        if (d < best.d) best = { s: 0, point: c.point, d };
       }
       return best;
     }
@@ -279,6 +329,18 @@ export function geomBox(e: Entity): Box {
       }
       return bx;
     }
+    default: {
+      const bx = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      for (const seg of annoSegments(e)) {
+        for (const q of seg) {
+          bx.minX = Math.min(bx.minX, q.x);
+          bx.minY = Math.min(bx.minY, q.y);
+          bx.maxX = Math.max(bx.maxX, q.x);
+          bx.maxY = Math.max(bx.maxY, q.y);
+        }
+      }
+      return bx;
+    }
   }
 }
 
@@ -313,6 +375,8 @@ function prims(e: Entity, near?: Box): Prim[] {
       }
       return out;
     }
+    default:
+      return [];
   }
 }
 
@@ -426,6 +490,8 @@ export function subEntity(e: Entity, s0: number, s1: number, id: string): Entity
       if (pts.length < 4) pts = [a.x, a.y, b.x + 1e-4, b.y];
       return { ...e, id, pts };
     }
+    default:
+      return e;
   }
 }
 
@@ -447,7 +513,7 @@ function mergeRanges(ranges: [number, number][]): [number, number][] {
  * `minLength` drops crumbs too short to see.
  */
 export function removeRanges(e: Entity, ranges: [number, number][], newId: () => string, minLength = MIN_PIECE): Entity[] {
-  if (ranges.length === 0) return [e];
+  if (ranges.length === 0 || isAnnotation(e)) return [e];
   const L = entityLength(e);
   const keep: [number, number][] = [];
   if (isClosed(e)) {
@@ -491,7 +557,7 @@ export function cutParams(e: Entity, cutters: Iterable<Entity>, touchTol = 0): n
   const out: number[] = [];
   const box = boxExpand(geomBox(e), 1e-6 + touchTol);
   for (const o of cutters) {
-    if (o.id === e.id || !boxesIntersect(box, geomBox(o))) continue;
+    if (o.id === e.id || isAnnotation(o) || !boxesIntersect(box, geomBox(o))) continue;
     for (const p of intersectEntities(e, o)) out.push(project(e, p).s);
     // An end of another object resting on this one (a T-junction) also bounds a trim.
     if (touchTol > 0) {
@@ -521,7 +587,7 @@ export function endPoints(e: Entity): Vec[] {
         { x: e.pts[n - 2], y: e.pts[n - 1] },
       ];
     }
-    case 'circle':
+    default:
       return [];
   }
 }

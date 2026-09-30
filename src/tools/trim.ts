@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { cutParams, entityLength, intersectSegment, project, removeRanges, subEntity, trimRange } from '../core/curves';
 import { newId } from '../core/document';
 import { dist, type Vec } from '../core/geom';
-import type { Entity } from '../core/types';
+import { isAnnotation, type Entity } from '../core/types';
 import { DANGER, drawFence } from '../render/overlay';
 import type { Tool, ToolEvent } from './tool';
 
@@ -49,7 +49,7 @@ export class TrimTool implements Tool {
 
   private pieceUnder(world: Vec, ev: ToolEvent): Piece | null {
     const hit = this.app.hitEntity(world, ev.pointerType);
-    return hit ? this.pieceAt(hit.e, hit.s) : null;
+    return hit && !isAnnotation(hit.e) ? this.pieceAt(hit.e, hit.s) : null;
   }
 
   private mark(marks: Map<string, Piece[]>, p: Piece): void {
@@ -74,6 +74,7 @@ export class TrimTool implements Tool {
     if (dist(st.last, ev.world) < 1e-9) return;
     // Every piece the swipe crosses gets trimmed.
     for (const e of this.app.doc.visibleEntities(false)) {
+      if (isAnnotation(e)) continue;
       for (const x of intersectSegment(e, st.last, ev.world)) this.mark(st.marks, this.pieceAt(e, project(e, x).s));
     }
     st.last = ev.world;

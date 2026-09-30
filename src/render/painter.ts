@@ -1,8 +1,10 @@
 import type { Camera } from '../core/camera';
 import { markExtent } from '../core/document';
+import { annoSegments } from '../core/curves';
 import type { Box } from '../core/geom';
 import { dashArray, INK_WIDTHS, penColor, PENCIL_WIDTHS } from '../core/pens';
-import type { ArcEntity, CircleEntity, Entity, LineEntity } from '../core/types';
+import { isAnnotation, type ArcEntity, type CircleEntity, type Entity, type LineEntity } from '../core/types';
+import { drawAnno, drawHatch } from './annotations';
 import { grain } from './grain';
 import { hashString, traceEntity } from './paths';
 import { roughAmpAtScale, roughAmplitude, traceRough } from './rough';
@@ -86,6 +88,14 @@ export class Painter {
 
   /** Draw an entity (plus its centre-line cross, if any). */
   draw(e: Entity, alpha = 1): void {
+    if (isAnnotation(e)) {
+      const color = penColor(e.style);
+      const a = alpha * (e.style.pen === 'pencil' ? PENCIL_ALPHA : 1);
+      const w = this.effectiveWidth(e.style.width);
+      if (e.kind === 'hatch') drawHatch(this.ctx, e, color, w, a);
+      else drawAnno(this.ctx, e, color, w, a);
+      return;
+    }
     this.drawOne(e, alpha, 0);
     if ((e.kind === 'circle' || e.kind === 'arc') && e.mark) {
       let marks = markCache.get(e);
@@ -178,7 +188,14 @@ export class Painter {
     ctx.lineJoin = 'round';
     ctx.setLineDash([]);
     ctx.beginPath();
-    traceEntity(ctx, e);
+    if (isAnnotation(e)) {
+      for (const [a, b] of annoSegments(e)) {
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+    } else {
+      traceEntity(ctx, e);
+    }
     ctx.stroke();
     ctx.globalAlpha = 1;
   }

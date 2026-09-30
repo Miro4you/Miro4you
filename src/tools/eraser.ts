@@ -3,6 +3,7 @@ import { capsuleRanges, removeRanges } from '../core/curves';
 import { newId } from '../core/document';
 import type { Vec } from '../core/geom';
 import { drawEraserCursor } from '../render/overlay';
+import { isAnnotation } from '../core/types';
 import type { PointerKind, Tool, ToolEvent } from './tool';
 
 /** Eraser radius in CSS px. */
@@ -57,6 +58,7 @@ export class EraserTool implements Tool {
     const R = this.app.cam.px(this.radius(type));
     const minLen = this.app.cam.px(0.75);
     for (const e of [...doc.visibleEntities(false)]) {
+      if (isAnnotation(e)) continue;
       const ranges = capsuleRanges(e, p0, p1, R + e.style.width / 2);
       if (!ranges.length) continue;
       const rest = removeRanges(e, ranges, () => newId('E'), minLen);

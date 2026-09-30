@@ -93,6 +93,33 @@ export function transformEntity<T extends Entity>(e: T, m: Affine, id: string = 
       const flip = det(m) < 0;
       return { ...e, id, c: applyAffine(m, e.c), start: mapAngle(m, e.start), sweep: flip ? -e.sweep : e.sweep };
     }
+    case 'hatch': {
+      const loops = e.loops.map((l) => {
+        const out = new Array<number>(l.length);
+        for (let i = 0; i < l.length; i += 2) {
+          out[i] = m.a * l[i] + m.c * l[i + 1] + m.e;
+          out[i + 1] = m.b * l[i] + m.d * l[i + 1] + m.f;
+        }
+        return out;
+      });
+      const rad = (e.angle * Math.PI) / 180;
+      return { ...e, id, loops, angle: (mapAngle(m, rad) * 180) / Math.PI };
+    }
+    case 'dim': {
+      const flip = det(m) < 0;
+      return {
+        ...e,
+        id,
+        p1: applyAffine(m, e.p1),
+        p2: applyAffine(m, e.p2),
+        ...(e.p3 ? { p3: applyAffine(m, e.p3) } : {}),
+        ...(e.dir !== undefined ? { dir: mapAngle(m, e.dir) } : {}),
+        off: e.type === 'lin' && flip ? -e.off : e.off,
+      };
+    }
+    case 'datum':
+    case 'gtol':
+      return { ...e, id, at: applyAffine(m, e.at), p: applyAffine(m, e.p) };
   }
 }
 
