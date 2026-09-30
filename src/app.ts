@@ -2,7 +2,7 @@ import { Camera } from './core/camera';
 import { project } from './core/curves';
 import { entityBox, newId, SketchDocument } from './core/document';
 import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from './core/geom';
-import { DEFAULT_STYLE } from './core/pens';
+import { DEFAULT_STYLE, PAPER_COLORS, setPenTheme, type Theme } from './core/pens';
 import { findSnap, snapAngle, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import { mirrorGroup, transformEntity, type Affine } from './core/transform';
 import type { Entity, LineEntity, Style } from './core/types';
@@ -12,6 +12,7 @@ import { SceneRenderer } from './render/scene';
 import { idbGet, idbSet, loadPref, savePref } from './storage/idb';
 import { ArcTool } from './tools/arc';
 import { CircleTool } from './tools/circle';
+import { CrossTool } from './tools/cross';
 import { DeleteTool } from './tools/delete';
 import { EraserTool } from './tools/eraser';
 import { FreehandTool } from './tools/freehand';
@@ -20,7 +21,7 @@ import { SelectTool } from './tools/select';
 import type { PointerKind, Tool } from './tools/tool';
 import { TrimTool } from './tools/trim';
 
-export type ToolId = 'select' | 'freehand' | 'line' | 'circle' | 'arc' | 'delete' | 'trim' | 'erase';
+export type ToolId = 'select' | 'freehand' | 'line' | 'circle' | 'arc' | 'cross' | 'delete' | 'trim' | 'erase';
 
 export interface Settings {
   grid: boolean;
@@ -37,9 +38,13 @@ export interface Settings {
   centerMarks: boolean;
   /** Arc tool: 'auto' = tangential at line/arc ends, else centre first; 'center' = always centre first. */
   arcMode: 'auto' | 'center';
+  /** Angle snap step in degrees. */
+  angleStep: number;
+  /** Freehand smoothing: length of the lazy string in CSS px (0 = off). */
+  stabilizer: number;
+  theme: 'system' | 'light' | 'dark';
 }
 
-export const ANGLE_STEP = 5;
 /** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
 export const SOFT_ANGLE_TOL = 1;
 /** CSS px per mm at 100 % zoom (96 dpi). */
@@ -54,11 +59,14 @@ const DEFAULT_SETTINGS: Settings = {
   grid: true,
   snap: true,
   angleMode: 'snap',
-  handles: true,
+  handles: false,
   fingerDraws: false,
   rotate: true,
   centerMarks: true,
   arcMode: 'auto',
+  angleStep: 5,
+  stabilizer: 0,
+  theme: 'system',
 };
 
 interface Widget {
@@ -97,6 +105,11 @@ export class App {
   private saveTimer: number | undefined;
   private loaded = false;
   private widgets: Widget[] = [];
+  /** Last full scene render, reused (transformed) while zooming/panning heavy drawings. */
+  private snapshot: { canvas: HTMLCanvasElement; m: DOMMatrix } | null = null;
+  private lastRenderMs = 0;
+  private docDirty = true;
+  private settleTimer: number | undefined;
   private mirrorCache: { version: number; list: Affine[] } | null = null;
 
   constructor(
@@ -114,6 +127,7 @@ export class App {
       line: new LineTool(this),
       circle: new CircleTool(this),
       arc: new ArcTool(this),
+      cross: new CrossTool(this),
       delete: new DeleteTool(this),
       trim: new TrimTool(this),
       erase: new EraserTool(this),
@@ -121,7 +135,11 @@ export class App {
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
     this.toolId = savedTool in this.tools ? savedTool : 'line';
 
+    this.applyTheme();
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => this.applyTheme());
+
     this.doc.onChange(() => {
+      this.docDirty = true;
       this.sceneDirty = true;
       this.overlayDirty = true;
       this.scheduleFrame();
@@ -173,6 +191,8 @@ export class App {
       c.style.width = `${w}px`;
       c.style.height = `${h}px`;
     }
+    this.docDirty = true;
+    this.snapshot = null;
     this.viewChanged();
   }
 
@@ -225,8 +245,29 @@ export class App {
     this.emit();
   }
 
+  /** Resolved colour theme. */
+  get theme(): Theme {
+    const t = this.settings.theme;
+    if (t !== 'system') return t;
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  private applyTheme(): void {
+    this.docDirty = true;
+    const t = this.theme;
+    setPenTheme(t);
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#1c1d21' : '#fbfaf6');
+    this.sceneDirty = true;
+    this.overlayDirty = true;
+    this.scheduleFrame();
+  }
+
   updateSettings(p: Partial<Settings>): void {
+    this.docDirty = true;
+    const themeChanged = p.theme !== undefined && p.theme !== this.settings.theme;
     this.settings = { ...this.settings, ...p };
+    if (themeChanged) this.applyTheme();
     savePref('settings', this.settings);
     this.sceneDirty = true;
     this.overlayDirty = true;
@@ -348,6 +389,8 @@ export class App {
     this.doc.begin();
     for (const e of entities) {
       this.doc.add(e);
+      // Axes themselves are not mirrored (that would multiply the axes).
+      if (e.kind === 'line' && e.axis) continue;
       for (const c of this.mirrorCopies(e)) this.doc.add({ ...c, z: this.doc.allocZ() });
     }
     this.doc.commit();
@@ -432,7 +475,7 @@ export class App {
   /** Snap a free point (e.g. line start) to existing geometry. */
   snapPoint(world: Vec, pointerType: PointerKind, exclude?: ReadonlySet<string>): { p: Vec; hit: SnapHit | null } {
     if (!this.settings.snap || this.snapSuspended) return { p: world, hit: null };
-    const hit = findSnap(this.doc, world, this.snapRadius(pointerType), { end: true, mid: true, int: true, exclude });
+    const hit = findSnap(this.doc, world, this.snapRadius(pointerType), { end: true, mid: true, int: true, on: true, exclude });
     return hit ? { p: hit.p, hit } : { p: world, hit: null };
   }
 
@@ -446,7 +489,7 @@ export class App {
     const s = this.snapPoint(world, pointerType, exclude);
     if (s.hit && dist(s.hit.p, anchor) > 1e-9) return s;
     if (this.snapSuspended) return { p: world, hit: null };
-    if (this.settings.angleMode === 'snap') return { p: snapAngle(anchor, world, ANGLE_STEP), hit: null };
+    if (this.settings.angleMode === 'snap') return { p: snapAngle(anchor, world, this.settings.angleStep), hit: null };
     return { p: softSnapAngle(anchor, world, SOFT_ANGLE_TOL), hit: null };
   }
 
@@ -456,7 +499,8 @@ export class App {
    */
   snapDegrees(deg: number): number {
     if (this.snapSuspended) return deg;
-    if (this.settings.angleMode === 'snap') return Math.round(deg / ANGLE_STEP) * ANGLE_STEP;
+    const step = this.settings.angleStep;
+    if (this.settings.angleMode === 'snap') return Math.round(deg / step) * step;
     const t = Math.round(deg / 45) * 45;
     return Math.abs(deg - t) <= SOFT_ANGLE_TOL ? t : deg;
   }
@@ -485,6 +529,51 @@ export class App {
     this.viewDirty = true;
     this.scheduleFrame();
     this.scheduleSave();
+    // Heavy drawings show a moved snapshot while the view is in motion; render crisply once it settles.
+    window.clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => {
+      this.docDirty = true;
+      this.sceneDirty = true;
+      this.scheduleFrame();
+    }, 140);
+  }
+
+  private deviceMatrix(): DOMMatrix {
+    const [a, b, c, d, e, f] = this.cam.matrix();
+    const k = this.dpr;
+    return new DOMMatrix([a * k, b * k, c * k, d * k, e * k, f * k]);
+  }
+
+  private renderScene(): void {
+    const fast = !this.docDirty && this.snapshot && this.lastRenderMs > 12;
+    const ctx = this.sceneCanvas.getContext('2d')!;
+    if (fast && this.snapshot) {
+      const rel = this.deviceMatrix().multiply(this.snapshot.m.inverse());
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = PAPER_COLORS[this.theme];
+      ctx.fillRect(0, 0, this.sceneCanvas.width, this.sceneCanvas.height);
+      ctx.setTransform(rel);
+      ctx.drawImage(this.snapshot.canvas, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      return;
+    }
+    const t0 = performance.now();
+    this.scene.render(this.doc, this.cam, this.width, this.height, this.dpr, { grid: this.settings.grid });
+    this.lastRenderMs = performance.now() - t0;
+    this.docDirty = false;
+    // Keep a copy for fast view changes.
+    if (this.lastRenderMs > 12) {
+      let c = this.snapshot?.canvas;
+      if (!c || c.width !== this.sceneCanvas.width || c.height !== this.sceneCanvas.height) {
+        c = document.createElement('canvas');
+        c.width = this.sceneCanvas.width;
+        c.height = this.sceneCanvas.height;
+      }
+      c.getContext('2d')!.drawImage(this.sceneCanvas, 0, 0);
+      this.snapshot = { canvas: c, m: this.deviceMatrix() };
+    } else {
+      this.snapshot = null;
+    }
   }
 
   resetView(): void {
@@ -533,7 +622,7 @@ export class App {
     }
     if (this.sceneDirty) {
       this.sceneDirty = false;
-      this.scene.render(this.doc, this.cam, this.width, this.height, this.dpr, { grid: this.settings.grid });
+      this.renderScene();
     }
     if (this.overlayDirty) {
       this.overlayDirty = false;
@@ -559,7 +648,7 @@ export class App {
   paintWorld(e: Entity): void {
     const p = this.worldPainter();
     p.draw(e);
-    for (const c of this.mirrorCopies(e, true)) p.draw(c, 0.55);
+    if (!(e.kind === 'line' && e.axis)) for (const c of this.mirrorCopies(e, true)) p.draw(c, 0.55);
     this.screenSpace();
   }
 

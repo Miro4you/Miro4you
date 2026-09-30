@@ -4,7 +4,7 @@ import type { PointerKind, ToolEvent } from '../tools/tool';
 import { deleteSelection, duplicateSelection, nudgeSelection } from '../tools/selection-actions';
 
 /** Touches wider than this (CSS px) are treated as a resting palm, not a finger. */
-const PALM_WIDTH_PX = 44;
+const PALM_WIDTH_PX = 120;
 const TAP_MAX_MS = 320;
 const TAP_MAX_MOVE_PX = 12;
 
@@ -426,6 +426,9 @@ export class InputController {
         break;
       case 'b':
         app.setTool('arc');
+        break;
+      case 'k':
+        app.setTool('cross');
         break;
       case 'x':
         app.setTool('delete');

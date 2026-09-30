@@ -22,7 +22,7 @@ export class TrimTool implements Tool {
   readonly id = 'trim';
   private state: State = { k: 'idle' };
   private hoverPiece: Piece | null = null;
-  private cutCache: { version: number; map: Map<string, number[]> } | null = null;
+  private cutCache: { version: number; scale: number; map: Map<string, number[]> } | null = null;
 
   constructor(private app: App) {}
 
@@ -33,10 +33,11 @@ export class TrimTool implements Tool {
   /** Where other visible objects cross e (cached until the drawing changes). */
   private cuts(e: Entity): number[] {
     const v = this.app.doc.version;
-    if (!this.cutCache || this.cutCache.version !== v) this.cutCache = { version: v, map: new Map() };
+    if (!this.cutCache || this.cutCache.version !== v || this.cutCache.scale !== this.app.cam.scale)
+      this.cutCache = { version: v, scale: this.app.cam.scale, map: new Map() };
     let c = this.cutCache.map.get(e.id);
     if (!c) {
-      c = cutParams(e, this.app.doc.visibleEntities());
+      c = cutParams(e, this.app.doc.visibleEntities(), this.app.cam.px(3));
       this.cutCache.map.set(e.id, c);
     }
     return c;

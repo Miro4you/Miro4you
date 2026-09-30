@@ -2,8 +2,9 @@ import type { Camera } from '../core/camera';
 import { boxesIntersect, boxExpand, type Box } from '../core/geom';
 import { entityBox, type SketchDocument } from '../core/document';
 import { Painter } from './painter';
+import { currentTheme, PAPER_COLORS } from '../core/pens';
 
-export const PAPER = '#fbfaf6';
+
 const DIMMED_ALPHA = 0.28;
 
 export interface SceneOptions {
@@ -26,7 +27,7 @@ export class SceneRenderer {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = PAPER;
+    ctx.fillStyle = PAPER_COLORS[currentTheme()];
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const view = cam.visibleBox(width, height);
@@ -58,11 +59,14 @@ function drawGrid(ctx: CanvasRenderingContext2D, cam: Camera, view: Box): void {
   const minorPx = minor * cam.scale;
   const fade = Math.min(1, Math.max(0, (minorPx - minPx) / (22 - minPx)));
 
+  const dark = currentTheme() === 'dark';
+  const rgb = dark ? '170, 190, 230' : '52, 78, 120';
+  const k = dark ? 0.8 : 1;
   ctx.setLineDash([]);
   ctx.lineWidth = cam.px(1);
   const levels: [number, string][] = [
-    [minor, `rgba(52, 78, 120, ${0.07 * fade})`],
-    [major, 'rgba(52, 78, 120, 0.13)'],
+    [minor, `rgba(${rgb}, ${0.07 * fade * k})`],
+    [major, `rgba(${rgb}, ${0.13 * k})`],
   ];
   for (const [step, color] of levels) {
     if (step === minor && fade <= 0.01) continue;

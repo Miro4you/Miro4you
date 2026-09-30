@@ -42,6 +42,13 @@ export function drawSnapMarker(ctx: CanvasRenderingContext2D, p: Vec, kind: Snap
     ctx.closePath();
   } else if (kind === 'cen') {
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+  } else if (kind === 'on') {
+    // Point on a curve: small hourglass.
+    ctx.moveTo(p.x - r + 1, p.y - r + 1);
+    ctx.lineTo(p.x + r - 1, p.y - r + 1);
+    ctx.lineTo(p.x - r + 1, p.y + r - 1);
+    ctx.lineTo(p.x + r - 1, p.y + r - 1);
+    ctx.closePath();
   } else if (kind === 'quad') {
     ctx.moveTo(p.x, p.y - r - 1);
     ctx.lineTo(p.x + r + 1, p.y);

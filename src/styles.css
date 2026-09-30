@@ -13,7 +13,29 @@
   --radius: 14px;
   --btn: 38px;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', system-ui, sans-serif;
+  --graphite: radial-gradient(circle at 35% 30%, #8b8f99, #454850 70%);
+  --ink: #111214;
+  --field: #ffffff;
   color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --paper: #1c1d21;
+  --panel: rgba(40, 42, 49, 0.9);
+  --panel-solid: #2a2c33;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #eceef3;
+  --muted: #9ba1b0;
+  --hover: rgba(255, 255, 255, 0.08);
+  --accent: #6b95ff;
+  --accent-soft: rgba(107, 149, 255, 0.18);
+  --danger: #ff6b5e;
+  --shadow: 0 0.5px 1px rgba(0, 0, 0, 0.3), 0 8px 26px -4px rgba(0, 0, 0, 0.55);
+  --graphite: radial-gradient(circle at 35% 30%, #d7dae1, #9a9ea8 70%);
+  --ink: #eeeef1;
+  --field: #1f2126;
+  --switch-off: rgba(255, 255, 255, 0.22);
+  color-scheme: dark;
 }
 
 * {
@@ -39,6 +61,7 @@ body {
 #app {
   position: fixed;
   inset: 0;
+  height: 100dvh;
 }
 
 canvas {
@@ -236,11 +259,11 @@ button:focus-visible {
 }
 
 .chip.pencil .dot {
-  background: radial-gradient(circle at 35% 30%, #8b8f99, #454850 70%);
+  background: var(--graphite);
 }
 
 .chip.ink .dot {
-  background: #111214;
+  background: var(--ink);
 }
 
 .chip .cap {
@@ -501,7 +524,7 @@ button:focus-visible {
 
 /* menu */
 .menu {
-  width: 260px;
+  width: 300px;
 }
 
 .menu-item {
@@ -538,7 +561,7 @@ button:focus-visible {
   width: 34px;
   height: 20px;
   border-radius: 10px;
-  background: rgba(22, 27, 38, 0.16);
+  background: var(--switch-off, rgba(22, 27, 38, 0.16));
   transition: background-color 0.15s;
 }
 
@@ -671,7 +694,7 @@ dialog.ask::backdrop {
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--field);
   color: var(--text);
   font: 15px var(--font);
   -webkit-user-select: text;
@@ -906,4 +929,158 @@ dialog.ask::backdrop {
 
 .palette[data-orient='h'] .sep {
   margin: 0 3px;
+}
+
+/* ---- compact palette & flyouts ------------------------------------------------------- */
+
+.chip .dot.pencil {
+  background: var(--graphite);
+}
+
+.chip .dot.ink {
+  background: var(--ink);
+}
+
+.pen-trigger {
+  width: 38px;
+}
+
+.flyout {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.97);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.flyout.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.flyout.fly-row {
+  flex-direction: row;
+}
+
+.flyout.fly-pens {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flyout.fly-wide {
+  flex-direction: column;
+  gap: 6px;
+  width: 250px;
+  padding: 10px 12px 12px;
+}
+
+.pen-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.row-label {
+  width: 62px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fly-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fly-hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.range-row input {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.range-value {
+  min-width: 42px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--hover);
+}
+
+.seg-btn {
+  flex: 1;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.seg-btn.active {
+  background: var(--panel-solid);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Compact menu that fits the browser viewport. */
+.popover {
+  max-height: calc(100dvh - 110px);
+  overscroll-behavior: contain;
+}
+
+.menu .menu-item {
+  min-height: 34px;
+  font-size: 13.5px;
+}
+
+.menu-label {
+  padding: 4px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.menu-seg {
+  margin: 0 6px 4px;
+}
+
+.palette[data-orient='h'] .pal-body {
+  flex-wrap: nowrap;
+  max-width: none;
+}
+
+:root[data-theme='dark'] .sw.active {
+  box-shadow: 0 0 0 2px var(--panel-solid), 0 0 0 4px var(--accent);
 }

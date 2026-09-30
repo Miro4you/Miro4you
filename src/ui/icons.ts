@@ -9,6 +9,8 @@ export const icons = {
   select: svg('<path d="M6 3.5 18 13l-5.2.9 3.1 5.8-2.2 1.2-3.1-5.8L6.6 19z"/>'),
   circle: svg('<circle cx="12" cy="12" r="7.5"/><path d="M12 12h7.5" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>'),
   arc: svg('<path d="M4.5 19.5V13a8.5 8.5 0 0 1 8.5-8.5h6.5"/><circle cx="4.5" cy="19.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="19.5" cy="4.5" r="1.5" fill="currentColor" stroke="none"/>'),
+  arcCenter: svg('<path d="M5 19a14 14 0 0 1 14-14"/><path d="M5 19 14 10" stroke-dasharray="2 2"/><circle cx="5" cy="19" r="1.4" fill="currentColor" stroke="none"/>'),
+  cross: svg('<path d="M12 2.5v19M2.5 12h19" stroke-dasharray="5 2 1 2"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>'),
   deleteObj: svg('<path d="M4 17 15.5 5.5"/><path d="m13.5 14.5 6 6m0-6-6 6"/>'),
   trim: svg('<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="6.5" cy="6.5" r="2.5"/><path d="M8.6 8.2 20 18.5M8.6 15.8 20 5.5"/>'),
   eraser: svg('<path d="m14.5 4.5 5 5-9.5 9.5H5.5L3 16.5z"/><path d="m9.5 9.5 5 5"/><path d="M10 19h10"/>'),

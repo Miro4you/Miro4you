@@ -1,5 +1,5 @@
 import type { App } from '../app';
-import { PEN_COLORS } from '../core/pens';
+import { standardColor } from '../core/pens';
 import { h } from './dom';
 
 /** Colours offered next to the standard graphite/black. */
@@ -61,7 +61,7 @@ export class ColorPopover {
     for (const b of this.buttons) b.classList.toggle('active', b.dataset.color === c);
     const std = this.el.querySelector('.std-btn') as HTMLElement;
     std.classList.toggle('active', c === null);
-    std.style.setProperty('--std', PEN_COLORS[this.app.style.pen]);
+    std.style.setProperty('--std', standardColor(this.app.style.pen));
     if (c) this.custom.value = c;
   }
 

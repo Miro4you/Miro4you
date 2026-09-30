@@ -218,6 +218,7 @@ export class LayersPanel {
 export class Menu {
   readonly el = h('div', { class: 'menu panel popover', role: 'menu' });
   private toggles = new Map<string, HTMLButtonElement>();
+  private themeRow: HTMLElement | null = null;
   isOpen = false;
 
   constructor(
@@ -238,11 +239,25 @@ export class Menu {
       this.toggles.set(key, b);
       return b;
     };
+    const themeRow = h('div', { class: 'seg menu-seg' });
+    for (const [t, label] of [
+      ['light', 'Hell'],
+      ['dark', 'Dunkel'],
+      ['system', 'System'],
+    ] as const) {
+      const b = h('button', { class: 'seg-btn', text: label });
+      b.dataset.theme = t;
+      b.addEventListener('click', () => app.updateSettings({ theme: t }));
+      themeRow.append(b);
+    }
+    this.themeRow = themeRow;
     this.el.append(
       item('Neue Zeichnung', actions.newDrawing),
       item('Datei öffnen …', actions.open, '⌘O'),
       item('Datei herunterladen', actions.download, '⌘S'),
       h('div', { class: 'menu-sep' }),
+      h('div', { class: 'menu-label', text: 'Darstellung' }),
+      themeRow,
       toggle('grid', 'Raster'),
       toggle('handles', 'Korrekturgriffe nach dem Zeichnen'),
       toggle('centerMarks', 'Mittellinien bei neuen Kreisen'),
@@ -256,6 +271,9 @@ export class Menu {
   }
 
   private update(): void {
+    for (const b of this.themeRow?.querySelectorAll<HTMLElement>('.seg-btn') ?? []) {
+      b.classList.toggle('active', b.dataset.theme === this.app.settings.theme);
+    }
     for (const [key, b] of this.toggles) {
       const on = this.app.settings[key as 'grid' | 'handles' | 'fingerDraws' | 'rotate' | 'centerMarks'];
       b.classList.toggle('on', on);
@@ -290,7 +308,9 @@ export function helpDialog(): HTMLDialogElement {
     ['Mausrad', 'Zoomen'],
     ['Leertaste + Ziehen, mittlere/rechte Maustaste', 'Ansicht verschieben'],
     ['Alt halten', 'Fang kurz aussetzen'],
-    ['V · F · L · C · B', 'Auswahl · Freihand · Linie · Kreis · Bogen'],
+    ['V · F · L · C · B · K', 'Auswahl · Freihand · Linie · Kreis · Bogen · Achsenkreuz'],
+    ['Werkzeuggruppe: nochmal tippen, lange drücken oder mit dem Pencil darüber schweben', 'Auswahl der Gruppe öffnen'],
+    ['Strich-Punkt-Linie', 'Wird automatisch Symmetrieachse (Knopf am Ende schaltet Spiegeln)'],
     ['X · T · E', 'Objekt löschen · Trimmen · Radierer'],
     ['Bogen am Linienende', 'Tangential weiterzeichnen (runde Ecke)'],
     ['Auswahl: antippen / Schlinge', 'Objekte hinzufügen oder entfernen / einkreisen'],

@@ -105,6 +105,7 @@ ui.addEventListener('click', (e) => {
 // Close popovers when drawing starts.
 overlayCanvas.addEventListener('pointerdown', () => {
   menu.close();
+  palette.closeFlyouts();
   if (window.matchMedia('(max-width: 700px)').matches) layers.close();
 });
 window.addEventListener('keydown', (e) => {

@@ -4,8 +4,8 @@ import type { SketchDocument } from './document';
 import { boxContainsPoint, dist, drawingAngleDeg, mid, polar, type Vec } from './geom';
 import type { Entity } from './types';
 
-/** end = endpoint, mid = midpoint, int = intersection, cen = centre, quad = quadrant point of a circle. */
-export type SnapKind = 'end' | 'mid' | 'int' | 'cen' | 'quad';
+/** end = endpoint, mid = midpoint, int = intersection, cen = centre, quad = quadrant point, on = nearest point on a curve. */
+export type SnapKind = 'end' | 'mid' | 'int' | 'cen' | 'quad' | 'on';
 
 export interface SnapHit {
   p: Vec;
@@ -18,12 +18,14 @@ export interface SnapOptions {
   int: boolean;
   /** Centres and quadrant points of circles and arcs (default on). */
   cen?: boolean;
+  /** Nearest point on lines, circles and arcs (lowest priority). */
+  on?: boolean;
   /** Entity ids to ignore (e.g. the one being edited). */
   exclude?: ReadonlySet<string>;
 }
 
 /** Lower value wins when two candidates are about equally close. */
-const PRIORITY: Record<SnapKind, number> = { end: 0, cen: 0.5, int: 1, quad: 1.5, mid: 2 };
+const PRIORITY: Record<SnapKind, number> = { end: 0, cen: 0.5, int: 1, quad: 1.5, mid: 2, on: 3 };
 
 /**
  * Find the best snap point within `radius` (world units) of `p`.
@@ -46,6 +48,7 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
   const centres = opts.cen !== false;
 
   const near: Entity[] = [];
+  const onCurve: Vec[] = [];
   for (const e of doc.visibleEntities()) {
     if (opts.exclude?.has(e.id)) continue;
     const box = entityBox(e);
@@ -80,10 +83,18 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
         break;
       }
     }
-    // Candidates for intersections: curves passing close to the pointer (not freehand strokes).
-    if (opts.int && e.kind !== 'stroke' && project(e, p).d <= radius) near.push(e);
+    // Curves passing close to the pointer: candidates for intersections and for "on the curve".
+    if (e.kind !== 'stroke') {
+      const pr = project(e, p);
+      if (pr.d <= radius) {
+        if (opts.int) near.push(e);
+        if (opts.on) onCurve.push(pr.point);
+      }
+    }
   }
 
+  // Nearest point on a curve only when nothing more specific is around.
+  if (!best) for (const q of onCurve) consider(q, 'on');
   if (opts.int && near.length > 1) {
     for (let i = 0; i < near.length; i++) {
       for (let j = i + 1; j < near.length; j++) {

@@ -5,7 +5,15 @@ import { dashArray, INK_WIDTHS, penColor, PENCIL_WIDTHS } from '../core/pens';
 import type { ArcEntity, CircleEntity, Entity, LineEntity } from '../core/types';
 import { grain } from './grain';
 import { hashString, traceEntity } from './paths';
-import { roughAmpAtScale, traceRough } from './rough';
+import { roughAmpAtScale, roughAmplitude, traceRough } from './rough';
+
+interface RoughCache {
+  key: string;
+  box: Box;
+  path: Path2D;
+}
+const roughCache = new WeakMap<Entity, RoughCache>();
+const markCache = new WeakMap<Entity, LineEntity[]>();
 
 /** Thinnest line drawn on screen, in CSS px, so fine pens stay visible when zoomed out. */
 export const MIN_LINE_PX = 0.7;
@@ -80,7 +88,9 @@ export class Painter {
   draw(e: Entity, alpha = 1): void {
     this.drawOne(e, alpha, 0);
     if ((e.kind === 'circle' || e.kind === 'arc') && e.mark) {
-      for (const l of centerMarks(e)) {
+      let marks = markCache.get(e);
+      if (!marks) markCache.set(e, (marks = centerMarks(e)));
+      for (const l of marks) {
         // Centre the pattern so the long dashes cross exactly at the centre.
         const w = this.effectiveWidth(l.style.width);
         const dash = dashArray(l.style.lineType, w);
@@ -106,9 +116,7 @@ export class Painter {
       if (amp > 0) {
         // Up close: ragged graphite edge, filled as one outline.
         ctx.fillStyle = paint;
-        ctx.beginPath();
-        traceRough(ctx, e, { width: w, dash, dashOffset, amp, pxPerMm: this.scale, view: this.view, seed: hashString(e.id) });
-        ctx.fill('nonzero');
+        ctx.fill(this.roughPath(e, w, dash, dashOffset, amp), 'nonzero');
         ctx.globalAlpha = 1;
         return;
       }
@@ -127,6 +135,37 @@ export class Painter {
     ctx.stroke();
     ctx.lineDashOffset = 0;
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * The ragged outline, cached per entity. It is rebuilt only when the zoom crosses
+   * a power of two (sampling level) or the view leaves the generously clipped area.
+   */
+  private roughPath(e: Entity, w: number, dash: number[], dashOffset: number, amp: number): Path2D {
+    const level = Math.round(Math.log2(1 / this.scale));
+    const px = Math.pow(2, -level);
+    const ampQ = Math.round((amp / roughAmplitude(e.style.width)) * 8) / 8;
+    const key = `${level}|${ampQ}|${w.toFixed(4)}|${dashOffset.toFixed(4)}`;
+    const v = this.view;
+    const c = roughCache.get(e);
+    if (c && c.key === key && v.minX >= c.box.minX && v.maxX <= c.box.maxX && v.minY >= c.box.minY && v.maxY <= c.box.maxY) {
+      return c.path;
+    }
+    const dx = v.maxX - v.minX;
+    const dy = v.maxY - v.minY;
+    const box = { minX: v.minX - dx / 2, maxX: v.maxX + dx / 2, minY: v.minY - dy / 2, maxY: v.maxY + dy / 2 };
+    const path = new Path2D();
+    traceRough(path, e, {
+      width: w,
+      dash,
+      dashOffset,
+      amp: ampQ * roughAmplitude(e.style.width),
+      pxPerMm: px,
+      view: box,
+      seed: hashString(e.id),
+    });
+    roughCache.set(e, { key, box, path });
+    return path;
   }
 
   /** Coloured halo behind/over an entity (selection, delete preview). */

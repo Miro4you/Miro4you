@@ -188,3 +188,16 @@ describe('eraser capsule', () => {
     expect(parts.every((p) => p.kind === 'stroke')).toBe(true);
   });
 });
+
+describe('trimming at T-junctions', () => {
+  it('treats an end resting on a line as a cut', () => {
+    const top = line(0, 0, 30, 0);
+    // Two short lines standing on the top line (ends 0.01 mm off, as drawn by hand).
+    const legs = [line(10, 0.01, 10, 8), line(20, 0.012, 20, 8)];
+    expect(cutParams(top, legs)).toEqual([]);
+    const cuts = cutParams(top, legs, 0.05);
+    expect(cuts.map((c) => +c.toFixed(3))).toEqual([10, 20]);
+    const rest = removeRanges(top, [trimRange(top, cuts, 15)], id);
+    expect(rest.length).toBe(2);
+  });
+});

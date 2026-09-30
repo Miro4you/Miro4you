@@ -3,10 +3,30 @@ import type { LineType, PenKind, Style } from './types';
 export const PENCIL_WIDTHS = [0.3, 0.5, 0.7, 0.9] as const;
 export const INK_WIDTHS = [0.18, 0.25, 0.35, 0.5, 0.7] as const;
 
-export const PEN_COLORS: Record<PenKind, string> = {
-  pencil: '#42454c', // graphite
-  ink: '#121212',
+export type Theme = 'light' | 'dark';
+
+/** Standard pen colours per theme: graphite and black on paper, light greys on dark. */
+const THEME_PENS: Record<Theme, Record<PenKind, string>> = {
+  light: { pencil: '#42454c', ink: '#121212' },
+  dark: { pencil: '#b4b8c1', ink: '#eeeef1' },
 };
+
+export const PAPER_COLORS: Record<Theme, string> = { light: '#fbfaf6', dark: '#1c1d21' };
+
+let theme: Theme = 'light';
+
+/** Colour scheme for standard pen colours and paper (exports always use 'light'). */
+export function setPenTheme(t: Theme): void {
+  theme = t;
+}
+
+export function currentTheme(): Theme {
+  return theme;
+}
+
+export function standardColor(pen: PenKind): string {
+  return THEME_PENS[theme][pen];
+}
 
 export const PEN_NAMES: Record<PenKind, string> = {
   pencil: 'Bleistift',
@@ -19,12 +39,12 @@ export interface LineTypeInfo {
   use: string;
 }
 
+/** Line types offered in the palette (freehand stays readable in old drawings). */
 export const LINE_TYPES: LineTypeInfo[] = [
   { id: 'solid', name: 'Volllinie', use: 'Sichtbare Kanten' },
   { id: 'dashed', name: 'Strichlinie', use: 'Verdeckte Kanten' },
   { id: 'dashdot', name: 'Strich-Punkt-Linie', use: 'Mittel- und Symmetrielinien' },
   { id: 'dashdotdot', name: 'Strich-Zweipunkt-Linie', use: 'Grenzstellungen, angrenzende Teile' },
-  { id: 'freehand', name: 'Freihandlinie', use: 'Bruchkanten' },
 ];
 
 /**
@@ -53,7 +73,7 @@ export function dashArray(lineType: LineType, d: number): number[] {
 }
 
 export function penColor(style: Style): string {
-  return style.color ?? PEN_COLORS[style.pen];
+  return style.color ?? standardColor(style.pen);
 }
 
 export function formatWidth(w: number): string {

@@ -77,7 +77,9 @@ export class LineTool implements Tool {
       this.state = { k: 'idle' };
       const cam = this.app.cam;
       if (dist(cam.toScreen(st.start), cam.toScreen(st.end)) >= TAP_PX) {
-        const e = this.app.newEntity<LineEntity>({ kind: 'line', a: st.start, b: st.end });
+        // A centre line (dash-dot) becomes a symmetry axis with mirroring on.
+        const axis = this.app.style.lineType === 'dashdot';
+        const e = this.app.newEntity<LineEntity>({ kind: 'line', a: st.start, b: st.end, ...(axis ? { axis: true, mirror: true } : {}) });
         this.app.addDrawn(e);
         this.handleId = this.app.settings.handles ? e.id : null;
       }

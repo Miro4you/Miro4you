@@ -34,7 +34,7 @@ export function roughAmplitude(width: number): number {
 /** Displacement to use at this zoom (px per mm); 0 means a plain stroke looks identical. */
 export function roughAmpAtScale(width: number, pxPerMm: number): number {
   const amp = roughAmplitude(width);
-  return amp * smoothstep(0.6, 2.2, amp * pxPerMm);
+  return amp * smoothstep(1, 2.6, amp * pxPerMm);
 }
 
 function smoothstep(a: number, b: number, x: number): number {
@@ -143,8 +143,8 @@ export function traceRough(ctx: PathCtx, e: Entity, o: RoughOptions): void {
       return v + (edge.at(seed, s - total) - v) * w;
     },
   };
-  // Sample spacing ≈ 1 px, snapped to a power of two so sample positions stay fixed in the world.
-  const h = Math.pow(2, Math.round(Math.log2(1 / o.pxPerMm)));
+  // Sample spacing ≈ 1.5 px, snapped to a power of two so sample positions stay fixed in the world.
+  const h = Math.pow(2, Math.round(Math.log2(1.5 / o.pxPerMm)));
   const arcStep = (radius: number) => {
     const rp = Math.max(radius * o.pxPerMm, ARC_TOL_PX * 2);
     return 2 * Math.acos(1 - ARC_TOL_PX / rp);

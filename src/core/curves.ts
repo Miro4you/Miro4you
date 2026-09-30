@@ -487,17 +487,43 @@ export function removeRanges(e: Entity, ranges: [number, number][], newId: () =>
 // ---- trimming ----------------------------------------------------------------------------------------------
 
 /** Parameters where other entities cross this one (sorted, de-duplicated). */
-export function cutParams(e: Entity, cutters: Iterable<Entity>): number[] {
+export function cutParams(e: Entity, cutters: Iterable<Entity>, touchTol = 0): number[] {
   const out: number[] = [];
-  const box = boxExpand(geomBox(e), 1e-6);
+  const box = boxExpand(geomBox(e), 1e-6 + touchTol);
   for (const o of cutters) {
     if (o.id === e.id || !boxesIntersect(box, geomBox(o))) continue;
     for (const p of intersectEntities(e, o)) out.push(project(e, p).s);
+    // An end of another object resting on this one (a T-junction) also bounds a trim.
+    if (touchTol > 0) {
+      for (const q of endPoints(o)) {
+        const pr = project(e, q);
+        if (pr.d <= touchTol) out.push(pr.s);
+      }
+    }
   }
   out.sort((a, b) => a - b);
   const uniq: number[] = [];
   for (const s of out) if (!uniq.length || s - uniq[uniq.length - 1] > 1e-7) uniq.push(s);
   return uniq;
+}
+
+/** Open ends of an entity (none for circles). */
+export function endPoints(e: Entity): Vec[] {
+  switch (e.kind) {
+    case 'line':
+      return [e.a, e.b];
+    case 'arc':
+      return arcEnds(e);
+    case 'stroke': {
+      const n = e.pts.length;
+      return [
+        { x: e.pts[0], y: e.pts[1] },
+        { x: e.pts[n - 2], y: e.pts[n - 1] },
+      ];
+    }
+    case 'circle':
+      return [];
+  }
 }
 
 /**
