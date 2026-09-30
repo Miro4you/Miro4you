@@ -55,6 +55,11 @@ export class Flyout {
     window.clearTimeout(this.closeTimer);
   }
 
+  /** Re-place after the content changed size. */
+  reposition(): void {
+    if (this.isOpen) this.place();
+  }
+
   toggle(anchor: HTMLElement): void {
     if (this.isOpen && this.anchor === anchor) this.close();
     else this.open(anchor);

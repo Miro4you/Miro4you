@@ -1088,7 +1088,15 @@ dialog.ask::backdrop {
 /* ---- phase 3: tolerance frame dialog, export dialog --------------------------------------- */
 
 dialog.gtol-dlg {
-  width: min(400px, calc(100% - 32px));
+  width: min(420px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin-top: max(12px, env(safe-area-inset-top));
+  padding: 14px 14px 12px;
+  overflow: auto;
+}
+
+dialog.gtol-dlg .dlg-actions {
+  margin-top: 12px;
 }
 
 .sym-grid {
@@ -1101,7 +1109,8 @@ dialog.gtol-dlg {
 .sym-btn {
   display: grid;
   place-items: center;
-  aspect-ratio: 1;
+  height: 40px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 9px;
   background: var(--field);
@@ -1114,7 +1123,7 @@ dialog.gtol-dlg {
 }
 
 .sym-name {
-  margin: 6px 0 10px;
+  margin: 4px 0 2px;
   font-size: 13px;
   color: var(--muted);
 }
@@ -1137,7 +1146,12 @@ dialog.gtol-dlg {
 .gtol-field {
   display: block;
   flex: 1;
-  margin-top: 8px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.gtol-datums {
+  flex: 0.8;
 }
 
 .gtol-field > span,
@@ -1197,4 +1211,14 @@ dialog.export-dlg {
 p.exp-hint {
   margin: 6px 0 0;
   font-size: 12.5px;
+}
+
+.fly-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fly-section[hidden] {
+  display: none;
 }

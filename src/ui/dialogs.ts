@@ -152,12 +152,13 @@ export function askGtol(initial: GtolSpec, confirm = 'Einfügen'): Promise<GtolS
     value.value = initial.value;
     const datums = h('input', { class: 'dlg-input', type: 'text', id: 'gtol-datums', autocomplete: 'off', placeholder: 'z. B. A B' });
     datums.value = initial.datums.join(' ');
-    const valueRow = h('div', { class: 'gtol-row' }, [
-      h('label', { class: 'gtol-dia', for: 'gtol-dia' }, [dia, 'Ø']),
-      h('label', { class: 'gtol-field' }, [h('span', { text: 'Toleranz' }), value]),
-    ]);
     const datumRow = h('label', { class: 'gtol-field gtol-datums' }, [h('span', { text: 'Bezüge' }), datums]);
-    const form = h('form', { method: 'dialog' }, [valueRow, datumRow]);
+    const valueRow = h('div', { class: 'gtol-row' }, [
+      h('label', { class: 'gtol-dia', for: 'gtol-dia', title: 'Toleranzzone ist ein Durchmesser' }, [dia, 'Ø']),
+      h('label', { class: 'gtol-field' }, [h('span', { text: 'Toleranz' }), value]),
+      datumRow,
+    ]);
+    const form = h('form', { method: 'dialog' }, [valueRow]);
     body.append(grid, name, form);
     refresh();
     const cancel = h('button', { class: 'dlg-btn', text: 'Abbrechen' });
@@ -183,7 +184,10 @@ export function askGtol(initial: GtolSpec, confirm = 'Einfügen'): Promise<GtolS
       finish(dlg, resolve, null);
     });
     dlg.showModal();
-    value.focus();
-    value.select();
+    // On touch devices don't pop up the keyboard right away (it would cover the dialog).
+    if (window.matchMedia?.('(pointer: fine)').matches) {
+      value.focus();
+      value.select();
+    } else ok.focus();
   });
 }

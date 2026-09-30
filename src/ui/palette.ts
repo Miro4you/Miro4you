@@ -79,6 +79,9 @@ export class Palette {
   private eraseBtn: HTMLButtonElement;
   private annoBtn: HTMLButtonElement;
   private annoItems = new Map<AnnoId, HTMLButtonElement>();
+  /** Hatch options, shown only while the hatch tool is active. */
+  private hatchOpts!: HTMLElement;
+  private annoFly!: Flyout;
   private hatchItems = new Map<string, HTMLButtonElement>();
   private lastAnno: AnnoId = loadPref<{ id: AnnoId }>('lastAnno', { id: 'dim' }).id;
   private penBtn: HTMLButtonElement;
@@ -170,6 +173,7 @@ export class Palette {
     this.annoBtn = btn('Schraffur, Bemaßung, GPS-Symbole', icons.dimension);
     const toolRow = h('div', { class: 'fly-tools' });
     const annoFly: Flyout = new Flyout([toolRow], side, 'fly-wide');
+    this.annoFly = annoFly;
     for (const a of ANNOS) {
       const b = item(a.title, a.icon, () => this.pickAnno(a.id), () => annoFly);
       this.annoItems.set(a.id, b);
@@ -202,7 +206,9 @@ export class Palette {
       this.hatchItems.set(`g:${g}`, b);
       gapRow.append(b);
     }
-    annoFly.el.append(
+    this.hatchOpts = h('div', { class: 'fly-section' });
+    annoFly.el.append(this.hatchOpts);
+    this.hatchOpts.append(
       h('div', { class: 'fly-title', text: 'Schraffur' }),
       patRow,
       h('div', { class: 'fly-title', text: 'Abstand' }),
@@ -384,6 +390,10 @@ export class Palette {
     this.annoBtn.innerHTML = ANNOS.find((a) => a.id === (anno ?? this.lastAnno))!.icon;
     this.annoBtn.classList.toggle('active', anno !== null);
     for (const [id, b] of this.annoItems) b.classList.toggle('active', id === anno);
+    if (this.hatchOpts.hidden !== (anno !== 'hatch')) {
+      this.hatchOpts.hidden = anno !== 'hatch';
+      this.annoFly.reposition();
+    }
     for (const [k, b] of this.hatchItems) {
       b.classList.toggle('active', k === `p:${settings.hatchPattern}` || k === `s:${settings.hatchSpacing}` || k === `g:${settings.hatchGap}`);
     }
