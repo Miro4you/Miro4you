@@ -57,7 +57,7 @@ export class FreehandTool implements Tool {
       style: { ...this.app.style },
       pts: out,
     };
-    this.app.doc.add(e);
+    this.app.addDrawn(e);
     this.app.requestOverlay();
   }
 

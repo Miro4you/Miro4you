@@ -1,4 +1,5 @@
-import { boxAddPoint, emptyBox, type Box } from './geom';
+import { geomBox } from './curves';
+import type { Box } from './geom';
 import type { DocFile, Entity, Layer, ViewState } from './types';
 
 type Change =
@@ -16,16 +17,27 @@ export function newId(prefix: string): string {
 const MAX_HISTORY = 300;
 const bboxCache = new WeakMap<Entity, Box>();
 
-/** Axis-aligned bounds of an entity's geometry (without line width). Cached per immutable entity object. */
+/** How far centre lines reach beyond a circle of radius r (mm). */
+export function markExtent(r: number): number {
+  return Math.min(4, Math.max(2, r * 0.25));
+}
+
+/**
+ * Axis-aligned bounds of what an entity draws (geometry plus centre-line cross,
+ * without line width). Cached per immutable entity object.
+ */
 export function entityBox(e: Entity): Box {
   let bx = bboxCache.get(e);
   if (bx) return bx;
-  bx = emptyBox();
-  if (e.kind === 'line') {
-    boxAddPoint(bx, e.a.x, e.a.y);
-    boxAddPoint(bx, e.b.x, e.b.y);
-  } else {
-    for (let i = 0; i < e.pts.length; i += 2) boxAddPoint(bx, e.pts[i], e.pts[i + 1]);
+  bx = { ...geomBox(e) };
+  if ((e.kind === 'circle' || e.kind === 'arc') && e.mark) {
+    const m = e.r + markExtent(e.r);
+    bx = {
+      minX: Math.min(bx.minX, e.c.x - m),
+      minY: Math.min(bx.minY, e.c.y - m),
+      maxX: Math.max(bx.maxX, e.c.x + m),
+      maxY: Math.max(bx.maxY, e.c.y + m),
+    };
   }
   bboxCache.set(e, bx);
   return bx;
@@ -292,10 +304,18 @@ export class SketchDocument {
     const entities = [...this.entities.values()]
       .sort((a, b) => a.z - b.z)
       .map((e): Entity => {
-        if (e.kind === 'line') {
-          return { ...e, a: { x: round(e.a.x), y: round(e.a.y) }, b: { x: round(e.b.x), y: round(e.b.y) } };
+        const rv = (v: { x: number; y: number }) => ({ x: round(v.x), y: round(v.y) });
+        switch (e.kind) {
+          case 'line':
+            return { ...e, a: rv(e.a), b: rv(e.b) };
+          case 'stroke':
+            return { ...e, pts: e.pts.map(round) };
+          case 'circle':
+            return { ...e, c: rv(e.c), r: round(e.r) };
+          case 'arc':
+            // Angles need more precision than millimetres.
+            return { ...e, c: rv(e.c), r: round(e.r), start: Math.round(e.start * 1e7) / 1e7, sweep: Math.round(e.sweep * 1e7) / 1e7 };
         }
-        return { ...e, pts: e.pts.map(round) };
       });
     return {
       format: 'skizzen-cad',
@@ -358,7 +378,11 @@ export function validateFile(data: unknown): DocFile {
   for (const e of f.entities) {
     if (!e || typeof e.id !== 'string' || !layerIds.has(e.layerId) || !e.style) continue;
     if (e.kind === 'line' && isVec(e.a) && isVec(e.b)) entities.push(e);
-    else if (e.kind === 'stroke' && Array.isArray(e.pts) && e.pts.length >= 2 && e.pts.every(isNum)) entities.push(e);
+    else if (e.kind === 'stroke' && Array.isArray(e.pts) && e.pts.length >= 4 && e.pts.every(isNum)) entities.push(e);
+    else if (e.kind === 'circle' && isVec(e.c) && isNum(e.r) && e.r > 0) entities.push(e);
+    else if (e.kind === 'arc' && isVec(e.c) && isNum(e.r) && e.r > 0 && isNum(e.start) && isNum(e.sweep) && e.sweep !== 0) {
+      entities.push(e);
+    }
   }
   return {
     format: 'skizzen-cad',

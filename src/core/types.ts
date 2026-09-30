@@ -26,6 +26,10 @@ export interface LineEntity extends EntityBase {
   kind: 'line';
   a: Vec;
   b: Vec;
+  /** Marked as symmetry axis. */
+  axis?: boolean;
+  /** For axes: new drawing is mirrored across it. */
+  mirror?: boolean;
 }
 
 export interface StrokeEntity extends EntityBase {
@@ -34,7 +38,28 @@ export interface StrokeEntity extends EntityBase {
   pts: number[];
 }
 
-export type Entity = LineEntity | StrokeEntity;
+export interface CircleEntity extends EntityBase {
+  kind: 'circle';
+  c: Vec;
+  r: number;
+  /** Draw a centre-line cross. */
+  mark?: boolean;
+}
+
+/**
+ * Circular arc. Angles are in world coordinates (radians, y pointing down), so a
+ * positive sweep turns clockwise on screen. The arc runs from `start` to `start + sweep`.
+ */
+export interface ArcEntity extends EntityBase {
+  kind: 'arc';
+  c: Vec;
+  r: number;
+  start: number;
+  sweep: number;
+  mark?: boolean;
+}
+
+export type Entity = LineEntity | StrokeEntity | CircleEntity | ArcEntity;
 
 export interface Layer {
   id: string;

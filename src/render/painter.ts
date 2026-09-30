@@ -1,7 +1,8 @@
 import type { Camera } from '../core/camera';
+import { markExtent } from '../core/document';
 import type { Box } from '../core/geom';
-import { dashArray, penColor } from '../core/pens';
-import type { Entity } from '../core/types';
+import { dashArray, INK_WIDTHS, penColor, PENCIL_WIDTHS } from '../core/pens';
+import type { ArcEntity, CircleEntity, Entity, LineEntity } from '../core/types';
 import { grain } from './grain';
 import { hashString, traceEntity } from './paths';
 import { roughAmpAtScale, traceRough } from './rough';
@@ -9,6 +10,26 @@ import { roughAmpAtScale, traceRough } from './rough';
 /** Thinnest line drawn on screen, in CSS px, so fine pens stay visible when zoomed out. */
 export const MIN_LINE_PX = 0.7;
 const PENCIL_ALPHA = 0.9;
+
+/** Thin partner of a pen width for centre lines (ISO: about half the width). */
+function thinWidth(e: CircleEntity | ArcEntity): number {
+  if (e.style.pen === 'pencil') return PENCIL_WIDTHS[0];
+  const target = e.style.width / 2;
+  let best: number = INK_WIDTHS[0];
+  for (const w of INK_WIDTHS) if (w <= target + 1e-9) best = w;
+  return best;
+}
+
+/** The two centre lines of a circle or arc as line entities (dash-dot, thin). */
+export function centerMarks(e: CircleEntity | ArcEntity): LineEntity[] {
+  const m = e.r + markExtent(e.r);
+  const style = { ...e.style, width: thinWidth(e), lineType: 'dashdot' as const };
+  const base = { kind: 'line' as const, layerId: e.layerId, z: e.z, style };
+  return [
+    { ...base, id: `${e.id}:h`, a: { x: e.c.x - m, y: e.c.y }, b: { x: e.c.x + m, y: e.c.y } },
+    { ...base, id: `${e.id}:v`, a: { x: e.c.x, y: e.c.y - m }, b: { x: e.c.x, y: e.c.y + m } },
+  ];
+}
 
 /**
  * Strokes entities onto a canvas in world coordinates.
@@ -55,7 +76,23 @@ export class Painter {
     return p;
   }
 
+  /** Draw an entity (plus its centre-line cross, if any). */
   draw(e: Entity, alpha = 1): void {
+    this.drawOne(e, alpha, 0);
+    if ((e.kind === 'circle' || e.kind === 'arc') && e.mark) {
+      for (const l of centerMarks(e)) {
+        // Centre the pattern so the long dashes cross exactly at the centre.
+        const w = this.effectiveWidth(l.style.width);
+        const dash = dashArray(l.style.lineType, w);
+        const period = dash.reduce((s, v) => s + v, 0);
+        const half = Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) / 2;
+        const offset = (((dash[0] / 2 - half) % period) + period) % period;
+        this.drawOne(l, alpha, offset);
+      }
+    }
+  }
+
+  private drawOne(e: Entity, alpha: number, dashOffset: number): void {
     const ctx = this.ctx;
     const s = e.style;
     const color = penColor(s);
@@ -70,7 +107,7 @@ export class Painter {
         // Up close: ragged graphite edge, filled as one outline.
         ctx.fillStyle = paint;
         ctx.beginPath();
-        traceRough(ctx, e, { width: w, dash, amp, pxPerMm: this.scale, view: this.view, seed: hashString(e.id) });
+        traceRough(ctx, e, { width: w, dash, dashOffset, amp, pxPerMm: this.scale, view: this.view, seed: hashString(e.id) });
         ctx.fill('nonzero');
         ctx.globalAlpha = 1;
         return;
@@ -84,9 +121,42 @@ export class Painter {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.setLineDash(dash);
+    ctx.lineDashOffset = dashOffset;
     ctx.beginPath();
     traceEntity(ctx, e);
     ctx.stroke();
+    ctx.lineDashOffset = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  /** Coloured halo behind/over an entity (selection, delete preview). */
+  highlight(e: Entity, color: string, alpha: number, extraPx = 5): void {
+    const ctx = this.ctx;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = this.effectiveWidth(e.style.width) + extraPx / this.scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    traceEntity(ctx, e);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  /** Dashed construction guide along an entity's geometry (constant on screen). */
+  guide(e: Entity, color: string, alpha = 1): void {
+    const ctx = this.ctx;
+    const px = 1 / this.scale;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5 * px;
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([7 * px, 5 * px]);
+    ctx.beginPath();
+    traceEntity(ctx, { ...e, style: { ...e.style, lineType: 'solid' } });
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
 }

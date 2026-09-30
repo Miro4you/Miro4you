@@ -4,6 +4,8 @@ import type { LineType, PenKind } from '../core/types';
 import { loadPref, savePref } from '../storage/idb';
 import { icons, lineTypeIcon } from './icons';
 import { h } from './dom';
+import { ColorPopover } from './colors';
+import { penColor } from '../core/pens';
 
 type Orient = 'h' | 'v';
 interface PalettePrefs {
@@ -45,17 +47,36 @@ export class Palette {
   private angleBtn: HTMLButtonElement;
   private undoBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
+  private colorBtn: HTMLButtonElement;
+  private colors: ColorPopover;
 
   constructor(private app: App) {
+    this.colors = new ColorPopover(app);
     const tools = h('div', { class: 'group tools' });
-    for (const [id, title, icon] of [
-      ['freehand', 'Freihand (F)', icons.freehand],
-      ['line', 'Linie (L)', icons.line],
+    const erasers = h('div', { class: 'group tools' });
+    for (const [id, title, icon, group] of [
+      ['select', 'Auswahl (V)', icons.select, tools],
+      ['freehand', 'Freihand (F)', icons.freehand, tools],
+      ['line', 'Linie (L)', icons.line, tools],
+      ['circle', 'Kreis: Mittelpunkt setzen, Radius ziehen (C)', icons.circle, tools],
+      ['arc', 'Bogen: am Linienende tangential, sonst Mittelpunkt zuerst · nochmal tippen: Modus (B)', icons.arc, tools],
+      ['delete', 'Objekt löschen: antippen oder drüberwischen (X)', icons.deleteObj, erasers],
+      ['trim', 'Trimmen bis zum nächsten Schnittpunkt: antippen oder drüberwischen (T)', icons.trim, erasers],
+      ['erase', 'Radierer (E)', icons.eraser, erasers],
     ] as const) {
-      const b = h('button', { class: 'btn', title, 'aria-label': title, html: icon });
-      b.addEventListener('click', () => app.setTool(id));
+      const b = h('button', { class: 'btn tool', title, 'aria-label': title, html: icon });
+      b.addEventListener('click', () => {
+        if (id === 'arc' && app.toolId === 'arc') {
+          const mode = app.settings.arcMode === 'auto' ? 'center' : 'auto';
+          app.updateSettings({ arcMode: mode });
+          app.toast(mode === 'auto' ? 'Bogen: tangential an Linienenden, sonst Mittelpunkt' : 'Bogen: immer Mittelpunkt zuerst');
+        } else {
+          app.setTool(id);
+        }
+      });
+      if (id === 'arc') b.append(h('span', { class: 'badge' }));
       this.toolBtns.set(id, b);
-      tools.append(b);
+      group.append(b);
     }
 
     const pencils = h('div', { class: 'group pens', 'data-pen': 'pencil' });
@@ -106,12 +127,20 @@ export class Palette {
       this.savePrefs();
     });
 
+    this.colorBtn = h('button', { class: 'btn color-btn', title: 'Farbe', 'aria-label': 'Farbe' });
+    this.colorBtn.append(h('span', { class: 'swatch' }));
+    this.colorBtn.addEventListener('click', () => this.colors.toggle(this.colorBtn));
+    const colorGroup = h('div', { class: 'group' }, [this.colorBtn]);
+
     const sep = () => h('div', { class: 'sep' });
     const body = h('div', { class: 'pal-body' }, [
       tools,
       sep(),
+      erasers,
+      sep(),
       pencils,
       inks,
+      colorGroup,
       sep(),
       lines,
       sep(),
@@ -128,7 +157,7 @@ export class Palette {
   }
 
   mount(parent: HTMLElement): void {
-    parent.append(this.el);
+    parent.append(this.el, this.colors.el);
     this.applyLayout();
     this.update();
   }
@@ -141,6 +170,11 @@ export class Palette {
   update(): void {
     const { style, settings, toolId, doc } = this.app;
     for (const [id, b] of this.toolBtns) b.classList.toggle('active', id === toolId);
+    const badge = this.toolBtns.get('arc')?.querySelector('.badge');
+    if (badge) badge.textContent = settings.arcMode === 'center' ? 'M' : '';
+    const swatch = this.colorBtn.querySelector('.swatch') as HTMLElement;
+    swatch.style.background = penColor(style);
+    this.colorBtn.classList.toggle('custom', style.color !== null);
     ALL_PENS.forEach((p, i) => this.penBtns[i].classList.toggle('active', p.pen === style.pen && p.width === style.width));
     for (const [id, b] of this.lineBtns) b.classList.toggle('active', id === style.lineType);
     this.snapBtn.classList.toggle('active', settings.snap);

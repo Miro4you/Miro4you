@@ -5,6 +5,7 @@ import { helpDialog, LayersPanel, Menu, Toast, ViewBar } from './ui/chrome';
 import { h } from './ui/dom';
 import { ask } from './ui/dialogs';
 import { Palette } from './ui/palette';
+import { SelectionBar } from './ui/selectionbar';
 
 const root = document.getElementById('app')!;
 const sceneCanvas = h('canvas', { class: 'scene' });
@@ -88,9 +89,10 @@ const layers = new LayersPanel(app);
 const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, help: () => help.showModal() });
 const viewBar = new ViewBar(app, layers, menu);
 const palette = new Palette(app);
+const selectionBar = new SelectionBar(app);
 const snapHint = h('div', { class: 'snap-hint', text: 'Fang pausiert' });
 
-ui.append(viewBar.el, layers.el, menu.el, toast.el, snapHint, help, fileInput);
+ui.append(viewBar.el, layers.el, menu.el, selectionBar.el, toast.el, snapHint, help, fileInput);
 palette.mount(ui);
 app.onUiChange(() => snapHint.classList.toggle('show', app.snapSuspended && app.settings.snap));
 

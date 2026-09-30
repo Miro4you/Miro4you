@@ -82,6 +82,8 @@ export interface RoughOptions {
   width: number;
   /** Canvas-style dash array for round caps ([] = solid). */
   dash: number[];
+  /** Like ctx.lineDashOffset: pattern position at the start of the path. */
+  dashOffset?: number;
   /** Edge displacement in mm (from roughAmpAtScale). */
   amp: number;
   /** Zoom in px per mm. */
@@ -125,10 +127,22 @@ export function clipSegment(x0: number, y0: number, x1: number, y1: number, b: B
 
 /** Add the ragged outline of a pencil entity to the current path (fill with nonzero). */
 export function traceRough(ctx: PathCtx, e: Entity, o: RoughOptions): void {
-  const { pts, s: S } = centerline(e);
+  const { pts, s: S, closed } = centerline(e);
   const n = S.length;
   const r = o.width / 2;
-  const noise = new EdgeNoise(o.amp, o.pxPerMm);
+  const edge = new EdgeNoise(o.amp, o.pxPerMm);
+  const total = S[n - 1];
+  // On closed curves blend into the start over the last stretch, so the edge meets itself.
+  const blend = Math.min(total / 4, 0.5);
+  const noise = {
+    at(seed: number, s: number): number {
+      const v = edge.at(seed, s);
+      if (!closed || s < total - blend) return v;
+      const t = (s - (total - blend)) / blend;
+      const w = t * t * (3 - 2 * t);
+      return v + (edge.at(seed, s - total) - v) * w;
+    },
+  };
   // Sample spacing ≈ 1 px, snapped to a power of two so sample positions stay fixed in the world.
   const h = Math.pow(2, Math.round(Math.log2(1 / o.pxPerMm)));
   const arcStep = (radius: number) => {
@@ -266,7 +280,8 @@ export function traceRough(ctx: PathCtx, e: Entity, o: RoughOptions): void {
       emitInterval(s0, s1, j0, j1);
       return;
     }
-    let pos = Math.floor(s0 / period) * period;
+    const off = o.dashOffset ?? 0;
+    let pos = Math.floor((s0 + off) / period) * period - off;
     while (pos <= s1) {
       for (let i = 0; i < o.dash.length && pos <= s1; i++) {
         const len = o.dash[i];

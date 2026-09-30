@@ -708,3 +708,202 @@ dialog.ask::backdrop {
 .dlg-btn.primary.danger {
   background: var(--danger);
 }
+
+/* ---- phase 2: tools, colours, selection bar --------------------------------------------- */
+
+.palette[data-orient='h'] .pal-body {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-width: calc(100vw - 72px);
+}
+
+.group {
+  flex-wrap: nowrap;
+}
+
+.btn.tool {
+  position: relative;
+}
+
+.btn .badge {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.color-btn .swatch {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.7), 0 0 0 1px var(--border);
+}
+
+.color-btn.custom .swatch {
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.8), 0 0 0 2px var(--accent);
+}
+
+.color-pop {
+  position: absolute;
+  width: 224px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none !important;
+  transform: translateY(4px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.color-pop.open {
+  opacity: 1;
+  pointer-events: auto !important;
+  transform: none;
+}
+
+.std-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--hover);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.std-btn::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--std, #42454c);
+}
+
+.std-btn.active {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  color: var(--accent);
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.sw {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.sw.active {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
+
+.custom-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.custom-color input {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.selbar {
+  position: absolute;
+  left: 50%;
+  top: max(12px, env(safe-area-inset-top));
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  transform: translate(-50%, -8px);
+  opacity: 0;
+  pointer-events: none !important;
+  transition: opacity 0.14s, transform 0.14s;
+}
+
+.selbar.open {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto !important;
+}
+
+.selbar .selcount {
+  padding: 0 8px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.selbar .btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.layer-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  min-width: 180px;
+  padding: 4px;
+  display: none;
+}
+
+.layer-menu.open {
+  display: block;
+}
+
+.layer-menu .menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Keep toasts clear of the selection bar. */
+.toast {
+  top: max(64px, calc(env(safe-area-inset-top) + 52px));
+}
+
+.snap-hint {
+  top: max(106px, calc(env(safe-area-inset-top) + 94px));
+}
+
+@media (max-width: 760px) {
+  .selbar .selcount {
+    display: none;
+  }
+}
+
+.palette[data-orient='h'] .chip {
+  width: 31px;
+}
+
+.palette[data-orient='h'] .btn.tool,
+.palette[data-orient='h'] .btn.lt {
+  min-width: 34px;
+}
+
+.palette[data-orient='h'] .sep {
+  margin: 0 3px;
+}

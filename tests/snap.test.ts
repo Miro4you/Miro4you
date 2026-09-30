@@ -72,3 +72,25 @@ describe('soft angle snap', () => {
     expect(drawingAngleDeg(s, softSnapAngle(s, at(37), 1))).toBeCloseTo(37);
   });
 });
+
+describe('snapping on circles and arcs', () => {
+  it('snaps to centres, quadrants and line/circle intersections', () => {
+    const doc = new SketchDocument();
+    doc.add({ kind: 'circle', id: 'c', layerId: doc.activeLayerId, z: doc.allocZ(), style: { pen: 'ink', width: 0.35, lineType: 'solid', color: null }, c: { x: 0, y: 0 }, r: 10 });
+    add(doc, 'l', [-20, 5], [20, 5]);
+    expect(findSnap(doc, { x: 0.3, y: -0.2 }, 1, all)).toEqual({ p: { x: 0, y: 0 }, kind: 'cen' });
+    expect(findSnap(doc, { x: 0.2, y: -9.8 }, 1, all)?.kind).toBe('quad');
+    const hit = findSnap(doc, { x: 8.5, y: 5.2 }, 1, all);
+    expect(hit?.kind).toBe('int');
+    expect(hit!.p.x).toBeCloseTo(Math.sqrt(75));
+  });
+
+  it('snaps to arc ends and the arc midpoint', () => {
+    const doc = new SketchDocument();
+    doc.add({ kind: 'arc', id: 'a', layerId: doc.activeLayerId, z: doc.allocZ(), style: { pen: 'ink', width: 0.35, lineType: 'solid', color: null }, c: { x: 0, y: 0 }, r: 10, start: 0, sweep: Math.PI / 2 });
+    expect(findSnap(doc, { x: 9.8, y: 0.3 }, 1, all)?.kind).toBe('end');
+    const m = findSnap(doc, { x: 7, y: 7.2 }, 1, all);
+    expect(m?.kind).toBe('mid');
+    expect(m!.p.x).toBeCloseTo(10 * Math.SQRT1_2);
+  });
+});

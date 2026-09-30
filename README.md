@@ -4,7 +4,7 @@ Technische Skizzen im Browser – schnell wie auf Papier, sauber wie CAD.
 Primär für das iPad mit Apple Pencil gebaut, funktioniert auch mit Maus und Tastatur.
 Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 
-## Stand: Phase 1
+## Stand: Phase 1 + 2
 
 - Unendlicher Canvas in Millimetern: Verschieben, Zoomen, Drehen (rastet bei 0°/45°/90° ein)
 - Bleistift 0,3 · 0,5 · 0,7 · 0,9 mm und Tusche 0,18 · 0,25 · 0,35 · 0,5 · 0,7 mm
@@ -21,6 +21,17 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - Schwebende, verschiebbare Werkzeugleiste (dockt an Seitenrändern hochkant an)
 - Als App installierbar (PWA, offlinefähig)
 
+**Phase 2**
+
+- Kreis: Mittelpunkt setzen, Radius aufziehen (Anzeige R und Ø), Mittellinienkreuz nach ISO, Griffe zum Verschieben und für den Radius
+- Bogen: am Ende einer Linie oder eines Bogens tangential weiter (runde Ecke, 90° rastet ein), sonst Mittelpunkt → Radius → Winkel; erneutes Tippen auf das Werkzeug erzwingt den Mittelpunkt-Modus
+- Fang zusätzlich an Kreismittelpunkten, Quadrantenpunkten, Bogenenden und Schnittpunkten mit Kreisen/Bögen
+- Symmetrieachsen: Linie auswählen → „Symmetrieachse“; alles Neue wird live gespiegelt, bei zwei Achsen in alle vier Quadranten; Knopf an der Achse schaltet das Spiegeln an/aus
+- Löschen: ganze Objekte (antippen oder drüberwischen), Trimmen bis zum nächsten Schnittpunkt (antippen oder quer drüberwischen), Radierer, der Linien, Kreise und Striche zerteilt
+- Auswahl: antippen (mehrere nacheinander), Schlinge, Verschieben mit Fang, Drehknopf, Griffe an Linien, Kreisen und Bögen; Leiste mit Duplizieren, 90° drehen, Spiegeln, Ebene wechseln, Achse, Mittellinien, Löschen
+- Stift, Linienart und Farbe wirken auch auf die Auswahl
+- Farben: Standard (Graphit/Schwarz), zehn Farben oder eigene Farbe
+
 ## Bedienung
 
 | Eingabe | Aktion |
@@ -32,7 +43,9 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 | Finger halten beim Zeichnen, oder Alt | Fang kurz aussetzen |
 | Mausrad | Zoomen |
 | Leertaste + Ziehen, mittlere/rechte Maustaste | Verschieben |
-| F / L | Freihand / Linie |
+| V · F · L · C · B | Auswahl · Freihand · Linie · Kreis · Bogen |
+| X · T · E | Objekt löschen · Trimmen · Radierer |
+| Entf · ⌘D · ⌘A · Pfeile | Auswahl löschen · duplizieren · alles wählen · verschieben |
 | 1–4 / 5–9 | Bleistift- / Tuschestärken |
 | ⇧1–⇧5 | Linienart |
 | S / A / G | Fang / Winkelmodus / Raster |
@@ -52,8 +65,8 @@ npm run preview    # Build lokal ansehen
 
 Technik: TypeScript, Vite, Canvas 2D, keine UI-Frameworks. Aufbau:
 
-- `src/core` – Geometrie, Dokument mit Undo/Redo, Kamera, Fang, Stifte/Linienarten
+- `src/core` – Geometrie (Kurven, Schnittpunkte, Trimmen), Transformationen, Dokument mit Undo/Redo, Kamera, Fang, Stifte/Linienarten
 - `src/render` – Szene (Papier, Raster, Objekte), Graphit-Textur, Overlay (Vorschau, Maße, Fangmarken)
-- `src/tools` – Werkzeuge (Freihand, Linie)
+- `src/tools` – Werkzeuge (Auswahl, Freihand, Linie, Kreis, Bogen, Löschen, Trimmen, Radierer) und gemeinsame Griffe
 - `src/input` – Pencil/Maus/Touch-Steuerung, Gesten, Tastatur
 - `src/ui` – Werkzeugleiste, Ebenen, Menü

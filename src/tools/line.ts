@@ -1,29 +1,24 @@
 import type { App } from '../app';
 import { dist, type Vec } from '../core/geom';
-import { newId } from '../core/document';
 import type { SnapHit } from '../core/snap';
 import type { LineEntity } from '../core/types';
-import { drawGuideLine, drawHandle, drawMeasureLabel, drawSnapMarker } from '../render/overlay';
-import type { PointerKind, Tool, ToolEvent } from './tool';
+import { drawGuideLine, drawMeasureLabel, drawSnapMarker } from '../render/overlay';
+import { drawGrips, GripDrag, gripsFor, hitGrip } from './grips';
+import type { Tool, ToolEvent } from './tool';
 
 /** Pen travel (CSS px) below which a press counts as a tap, not a line. */
 const TAP_PX = 3;
-/**
- * Handles sit this far (CSS px) beyond each line end, so pressing right on an
- * endpoint still starts a new connected line instead of grabbing the handle.
- */
-const KNOB_OFFSET_PX = 24;
 
 type State =
   | { k: 'idle' }
   | { k: 'draw'; start: Vec; startHit: SnapHit | null; end: Vec; endHit: SnapHit | null }
-  | { k: 'drag'; id: string; which: 0 | 1; before: LineEntity; hit: SnapHit | null; grab: Vec };
+  | { k: 'grip'; drag: GripDrag };
 
 /**
  * Straight line: press and drag shows a dashed guide with live length/angle,
  * lifting the pen creates the line. Endpoints snap to existing geometry and the
- * angle to 5° steps (depending on settings). Optional handles allow correcting
- * the ends of the most recent line.
+ * angle to 5° steps (depending on settings). Optional knobs beyond the ends of the
+ * most recent line allow correcting it.
  */
 export class LineTool implements Tool {
   readonly id = 'line';
@@ -37,12 +32,11 @@ export class LineTool implements Tool {
     return this.state.k !== 'idle';
   }
 
+  /** The last drawn line, if its correction knobs should show. */
   private handleLine(): LineEntity | null {
     if (!this.handleId || !this.app.settings.handles) return null;
     const e = this.app.doc.get(this.handleId);
-    if (!e || e.kind !== 'line') return null;
-    const layer = this.app.doc.layer(e.layerId);
-    if (!layer || !layer.visible || layer.locked) return null;
+    if (!e || e.kind !== 'line' || !this.app.isEditable(e)) return null;
     return e;
   }
 
@@ -50,16 +44,9 @@ export class LineTool implements Tool {
     this.hoverHit = null;
     const line = this.handleLine();
     if (line) {
-      const r = this.app.handleHitRadius(ev.pointerType);
-      const k = this.knobs(line);
-      const da = dist(k.ka, ev.screen);
-      const db = dist(k.kb, ev.screen);
-      if (Math.min(da, db) <= r) {
-        const which = da <= db ? 0 : 1;
-        // Remember where on the knob it was grabbed relative to the endpoint.
-        const end = which === 0 ? k.a : k.b;
-        const grab = { x: ev.screen.x - end.x, y: ev.screen.y - end.y };
-        this.state = { k: 'drag', id: line.id, which, before: line, hit: null, grab };
+      const g = hitGrip(this.app, gripsFor(this.app, line, 'knobs'), ev.screen, this.app.handleHitRadius(ev.pointerType));
+      if (g) {
+        this.state = { k: 'grip', drag: new GripDrag(this.app, g, line, ev.screen) };
         this.app.requestOverlay();
         return;
       }
@@ -78,37 +65,9 @@ export class LineTool implements Tool {
       st.end = r.p;
       st.endHit = r.hit;
       this.app.requestOverlay();
-    } else if (st.k === 'drag') {
-      this.dragTo(st, ev.screen, ev.pointerType);
+    } else if (st.k === 'grip') {
+      st.drag.move(ev);
     }
-  }
-
-  /** Screen positions of both ends and their handle knobs. */
-  private knobs(line: LineEntity): { a: Vec; b: Vec; ka: Vec; kb: Vec } {
-    const cam = this.app.cam;
-    const a = cam.toScreen(line.a);
-    const b = cam.toScreen(line.b);
-    const l = dist(a, b);
-    const ux = l > 1e-6 ? (b.x - a.x) / l : 1;
-    const uy = l > 1e-6 ? (b.y - a.y) / l : 0;
-    return {
-      a,
-      b,
-      ka: { x: a.x - ux * KNOB_OFFSET_PX, y: a.y - uy * KNOB_OFFSET_PX },
-      kb: { x: b.x + ux * KNOB_OFFSET_PX, y: b.y + uy * KNOB_OFFSET_PX },
-    };
-  }
-
-  private dragTo(st: Extract<State, { k: 'drag' }>, screen: Vec, pointerType: PointerKind): void {
-    const cur = this.app.doc.get(st.id);
-    if (!cur || cur.kind !== 'line') return;
-    const anchor = st.which === 0 ? st.before.b : st.before.a;
-    const world = this.app.cam.toWorld({ x: screen.x - st.grab.x, y: screen.y - st.grab.y });
-    const r = this.app.resolveEnd(anchor, world, pointerType, new Set([st.id]));
-    st.hit = r.hit;
-    const next: LineEntity = st.which === 0 ? { ...cur, a: r.p } : { ...cur, b: r.p };
-    this.app.doc.replaceTransient(next);
-    this.app.requestOverlay();
   }
 
   up(ev: ToolEvent): void {
@@ -117,33 +76,21 @@ export class LineTool implements Tool {
       this.move(ev);
       this.state = { k: 'idle' };
       const cam = this.app.cam;
-      if (dist(cam.toScreen(st.start), cam.toScreen(st.end)) < TAP_PX) {
-        this.app.requestOverlay();
-        return;
+      if (dist(cam.toScreen(st.start), cam.toScreen(st.end)) >= TAP_PX) {
+        const e = this.app.newEntity<LineEntity>({ kind: 'line', a: st.start, b: st.end });
+        this.app.addDrawn(e);
+        this.handleId = this.app.settings.handles ? e.id : null;
       }
-      const e: LineEntity = {
-        kind: 'line',
-        id: newId('E'),
-        layerId: this.app.doc.activeLayerId,
-        z: this.app.doc.allocZ(),
-        style: { ...this.app.style },
-        a: st.start,
-        b: st.end,
-      };
-      this.app.doc.add(e);
-      this.handleId = this.app.settings.handles ? e.id : null;
-    } else if (st.k === 'drag') {
-      this.dragTo(st, ev.screen, ev.pointerType);
+    } else if (st.k === 'grip') {
+      st.drag.move(ev);
+      st.drag.end();
       this.state = { k: 'idle' };
-      const after = this.app.doc.get(st.id);
-      if (after && after !== st.before) this.app.doc.update(after, st.before);
     }
     this.app.requestOverlay();
   }
 
   cancel(): void {
-    const st = this.state;
-    if (st.k === 'drag' && this.app.doc.get(st.id)) this.app.doc.replaceTransient(st.before);
+    if (this.state.k === 'grip') this.state.drag.cancel();
     this.state = { k: 'idle' };
     this.app.requestOverlay();
   }
@@ -163,18 +110,18 @@ export class LineTool implements Tool {
     this.hoverHit = null;
   }
 
-  /** Drop the handles (e.g. after undo removed the line). */
-  dropHandles(): void {
-    this.handleId = null;
-    this.app.requestOverlay();
-  }
-
   overlay(ctx: CanvasRenderingContext2D): void {
     const cam = this.app.cam;
     const st = this.state;
     if (st.k === 'draw') {
       const a = cam.toScreen(st.start);
       const b = cam.toScreen(st.end);
+      if (dist(a, b) >= TAP_PX) {
+        this.app.paintGuide(
+          { kind: 'line', id: 'preview', layerId: '', z: 0, style: this.app.style, a: st.start, b: st.end },
+          true,
+        );
+      }
       drawGuideLine(ctx, a, b);
       if (st.startHit) drawSnapMarker(ctx, a, st.startHit.kind);
       if (st.endHit) drawSnapMarker(ctx, b, st.endHit.kind);
@@ -183,14 +130,9 @@ export class LineTool implements Tool {
     }
     const line = this.handleLine();
     if (line) {
-      const { a, b, ka, kb } = this.knobs(line);
-      if (st.k === 'drag') {
-        const p = st.which === 0 ? a : b;
-        if (st.hit) drawSnapMarker(ctx, p, st.hit.kind);
-        drawMeasureLabel(ctx, a, b, this.app.measureText(line.a, line.b));
-      }
-      drawHandle(ctx, a, ka, st.k === 'drag' && st.which === 0);
-      drawHandle(ctx, b, kb, st.k === 'drag' && st.which === 1);
+      const grips = gripsFor(this.app, line, 'knobs');
+      if (st.k === 'grip') st.drag.overlay(ctx);
+      drawGrips(this.app, ctx, grips, 'knobs', st.k === 'grip' ? st.drag.grip.key : undefined);
     }
     if (st.k === 'idle' && this.hoverHit) drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
   }

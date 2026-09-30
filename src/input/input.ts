@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { dist, type Vec } from '../core/geom';
 import type { PointerKind, ToolEvent } from '../tools/tool';
+import { deleteSelection, duplicateSelection, nudgeSelection } from '../tools/selection-actions';
 
 /** Touches wider than this (CSS px) are treated as a resting palm, not a finger. */
 const PALM_WIDTH_PX = 44;
@@ -34,6 +35,8 @@ export class InputController {
   private touchesIgnored = false;
   private tap: { t0: number; max: number; moved: boolean } | null = null;
   private spaceDown = false;
+  /** Pointer whose press went to an on-canvas control; its moves and release are ignored. */
+  private consumed: number | null = null;
   private altDown = false;
 
   constructor(
@@ -109,6 +112,7 @@ export class InputController {
   };
 
   private onMove = (e: PointerEvent): void => {
+    if (e.pointerId === this.consumed) return;
     const type = this.kind(e);
     if (type === 'touch') {
       this.touchMove(e);
@@ -130,6 +134,10 @@ export class InputController {
   };
 
   private onUp = (e: PointerEvent): void => {
+    if (e.pointerId === this.consumed) {
+      this.consumed = null;
+      return;
+    }
     const type = this.kind(e);
     if (type === 'touch') {
       this.touchUp(e, false);
@@ -144,6 +152,10 @@ export class InputController {
   };
 
   private onCancel = (e: PointerEvent): void => {
+    if (e.pointerId === this.consumed) {
+      this.consumed = null;
+      return;
+    }
     if (this.kind(e) === 'touch') {
       this.touchUp(e, true);
       return;
@@ -167,6 +179,10 @@ export class InputController {
   // ---- drawing ------------------------------------------------------------------------
 
   private startDraw(e: PointerEvent, type: PointerKind): void {
+    if (this.app.tapWidget(this.screenPos(e))) {
+      this.consumed = e.pointerId;
+      return;
+    }
     this.capture(e);
     const ev = this.toolEvent(e, type);
     this.draw = { id: e.pointerId, type, last: ev };
@@ -224,6 +240,7 @@ export class InputController {
   private touchDown(e: PointerEvent): void {
     const p = this.screenPos(e);
     const small = !(e.width > PALM_WIDTH_PX || e.height > PALM_WIDTH_PX);
+    if (!this.draw && this.touches.size === 0 && this.app.tapWidget(p)) return;
     this.touches.set(e.pointerId, { p, start: p, small });
     this.capture(e);
 
@@ -353,6 +370,12 @@ export class InputController {
       } else if (k === 'o') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('app:open'));
+      } else if (k === 'a') {
+        e.preventDefault();
+        app.selectAll();
+      } else if (k === 'd') {
+        e.preventDefault();
+        if (app.toolId === 'select') duplicateSelection(app);
       }
       return;
     }
@@ -380,7 +403,39 @@ export class InputController {
       }
       return;
     }
+    if (app.toolId === 'select' && app.selection.size) {
+      const step = e.shiftKey ? 10 : 1;
+      const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (arrows[e.key]) {
+        e.preventDefault();
+        nudgeSelection(app, arrows[e.key][0] * step, arrows[e.key][1] * step);
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelection(app);
+        return;
+      }
+    }
     switch (e.key.toLowerCase()) {
+      case 'v':
+        app.setTool('select');
+        break;
+      case 'c':
+        app.setTool('circle');
+        break;
+      case 'b':
+        app.setTool('arc');
+        break;
+      case 'x':
+        app.setTool('delete');
+        break;
+      case 't':
+        app.setTool('trim');
+        break;
+      case 'e':
+        app.setTool('erase');
+        break;
       case 'f':
         app.setTool('freehand');
         break;

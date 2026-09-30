@@ -232,7 +232,7 @@ export class Menu {
       });
       return b;
     };
-    const toggle = (key: 'grid' | 'handles' | 'fingerDraws' | 'rotate', label: string) => {
+    const toggle = (key: 'grid' | 'handles' | 'fingerDraws' | 'rotate' | 'centerMarks', label: string) => {
       const b = h('button', { class: 'menu-item toggle-item', role: 'menuitemcheckbox' }, [h('span', { text: label }), h('span', { class: 'switch' })]);
       b.addEventListener('click', () => app.updateSettings({ [key]: !app.settings[key] }));
       this.toggles.set(key, b);
@@ -244,7 +244,8 @@ export class Menu {
       item('Datei herunterladen', actions.download, '⌘S'),
       h('div', { class: 'menu-sep' }),
       toggle('grid', 'Raster'),
-      toggle('handles', 'Griffe an Linienenden'),
+      toggle('handles', 'Korrekturgriffe nach dem Zeichnen'),
+      toggle('centerMarks', 'Mittellinien bei neuen Kreisen'),
       toggle('rotate', 'Drehen mit zwei Fingern'),
       toggle('fingerDraws', 'Mit dem Finger zeichnen'),
       h('div', { class: 'menu-sep' }),
@@ -256,7 +257,7 @@ export class Menu {
 
   private update(): void {
     for (const [key, b] of this.toggles) {
-      const on = this.app.settings[key as 'grid' | 'handles' | 'fingerDraws' | 'rotate'];
+      const on = this.app.settings[key as 'grid' | 'handles' | 'fingerDraws' | 'rotate' | 'centerMarks'];
       b.classList.toggle('on', on);
       b.setAttribute('aria-checked', String(on));
     }
@@ -289,7 +290,13 @@ export function helpDialog(): HTMLDialogElement {
     ['Mausrad', 'Zoomen'],
     ['Leertaste + Ziehen, mittlere/rechte Maustaste', 'Ansicht verschieben'],
     ['Alt halten', 'Fang kurz aussetzen'],
-    ['F / L', 'Freihand / Linie'],
+    ['V · F · L · C · B', 'Auswahl · Freihand · Linie · Kreis · Bogen'],
+    ['X · T · E', 'Objekt löschen · Trimmen · Radierer'],
+    ['Bogen am Linienende', 'Tangential weiterzeichnen (runde Ecke)'],
+    ['Auswahl: antippen / Schlinge', 'Objekte hinzufügen oder entfernen / einkreisen'],
+    ['Auswahl ziehen · Drehknopf', 'Verschieben mit Fang · Drehen'],
+    ['Entf · ⌘D · ⌘A · Pfeile', 'Löschen · Duplizieren · Alles wählen · Verschieben 1 mm (⇧ 10 mm)'],
+    ['Symmetrieachse', 'Linie auswählen → Achse; Knopf an der Achse schaltet Spiegeln'],
     ['1–4 · 5–9', 'Bleistift 0,3–0,9 · Tusche 0,18–0,7'],
     ['⇧1–⇧5', 'Linienart'],
     ['S · A · G', 'Fang · Winkelmodus · Raster'],
