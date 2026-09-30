@@ -19,7 +19,7 @@ reine Touch-Bedienung (Finger zeichnet) hat niedrige Priorität.
 
 | Typ | Stärken (mm) | Look |
 |---|---|---|
-| Bleistift | 0,3 · 0,5 · 0,7 · 0,9 | Graphitgrau, leichte Körnung/Textur |
+| Bleistift | 0,3 · 0,5 · 0,7 · 0,9 | Graphitgrau, Papierkorn fest auf dem Papier (flimmert nicht beim Zoomen), bei starkem Zoom leicht ausgefranste Ränder |
 | Tusche | 0,18 · 0,25 · 0,35 · 0,5 · 0,7 | Tiefschwarz, gestochen scharf |
 
 - Standardfarbe: Graphit bzw. Schwarz.
@@ -57,6 +57,7 @@ Freies Scribbeln mit dem gewählten Stift.
   - Fangpunkt wird vor dem Einrasten sichtbar markiert.
   - Fang temporär aussetzen: zweiter Finger auf dem Display (iPad) bzw. Modifier-Taste (Maus, z. B. Alt).
 - **Winkelfang** in 5°-Schritten; klar sichtbarer Schalter mit drei Zuständen: **Fang an / nur Anzeige / aus**.
+- Auch bei „nur Anzeige“ und „aus“ **leichtes Einrasten** (±1°) bei 0°, 45°, 90° usw.
 - **Griffe an den Enden** nach dem Absetzen zum Nachkorrigieren – als **abschaltbare Einstellung** (Feature-Flag), damit man es leicht wieder entfernen kann.
 
 ### 5.3 Kreis

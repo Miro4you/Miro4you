@@ -13,6 +13,8 @@ export class FreehandTool implements Tool {
   readonly id = 'freehand';
   private pts: number[] | null = null;
   private last: Vec = { x: 0, y: 0 };
+  /** Id of the stroke in progress (the preview uses it too, so it looks identical). */
+  private strokeId = '';
 
   constructor(private app: App) {}
 
@@ -24,6 +26,7 @@ export class FreehandTool implements Tool {
     if (!this.app.ensureDrawableLayer()) return;
     this.pts = [ev.world.x, ev.world.y];
     this.last = ev.screen;
+    this.strokeId = newId('S');
     this.app.requestOverlay();
   }
 
@@ -48,7 +51,7 @@ export class FreehandTool implements Tool {
     }
     const e: StrokeEntity = {
       kind: 'stroke',
-      id: newId('S'),
+      id: this.strokeId,
       layerId: this.app.doc.activeLayerId,
       z: this.app.doc.allocZ(),
       style: { ...this.app.style },
@@ -73,7 +76,7 @@ export class FreehandTool implements Tool {
     if (!this.pts) return;
     const preview: StrokeEntity = {
       kind: 'stroke',
-      id: 'preview',
+      id: this.strokeId,
       layerId: this.app.doc.activeLayerId,
       z: 0,
       style: this.app.style,

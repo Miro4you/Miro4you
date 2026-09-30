@@ -1,8 +1,10 @@
 import type { Camera } from '../core/camera';
+import type { Box } from '../core/geom';
 import { dashArray, penColor } from '../core/pens';
 import type { Entity } from '../core/types';
-import { grainTile } from './grain';
-import { traceEntity } from './paths';
+import { grain } from './grain';
+import { hashString, traceEntity } from './paths';
+import { roughAmpAtScale, traceRough } from './rough';
 
 /** Thinnest line drawn on screen, in CSS px, so fine pens stay visible when zoomed out. */
 export const MIN_LINE_PX = 0.7;
@@ -10,25 +12,26 @@ const PENCIL_ALPHA = 0.9;
 
 /**
  * Strokes entities onto a canvas in world coordinates.
- * One painter per canvas context (it caches pencil grain patterns).
+ * One painter per canvas context (it caches pencil grain patterns per frame).
  */
 export class Painter {
-  private patterns = new Map<string, CanvasPattern>();
+  private patterns = new Map<string, CanvasPattern | null>();
   private patternMatrix: DOMMatrix | null = null;
   private scale = 1;
+  private view: Box = { minX: -Infinity, minY: -Infinity, maxX: Infinity, maxY: Infinity };
 
   constructor(private ctx: CanvasRenderingContext2D) {}
 
-  /** Set the world transform for this frame. */
-  begin(cam: Camera, dpr: number): void {
+  /** Set the world transform for this frame; `view` is the visible world box. */
+  begin(cam: Camera, dpr: number, view: Box): void {
     const [a, b, c, d, e, f] = cam.matrix();
-    const m: [number, number, number, number, number, number] = [a * dpr, b * dpr, c * dpr, d * dpr, e * dpr, f * dpr];
-    this.ctx.setTransform(...m);
+    this.ctx.setTransform(a * dpr, b * dpr, c * dpr, d * dpr, e * dpr, f * dpr);
     this.scale = cam.scale;
-    // Grain is anchored to the world origin on screen but keeps a constant pixel size.
-    const k = Math.max(1, dpr * 0.6);
+    this.view = view;
+    grain.update(cam.scale, dpr);
+    // Pattern space → world: one grain texel is `grain.texel` mm on the paper.
     try {
-      this.patternMatrix = new DOMMatrix(m).inverse().multiply(new DOMMatrix().translate(m[4], m[5]).scale(k));
+      this.patternMatrix = new DOMMatrix().scale(grain.texel);
     } catch {
       this.patternMatrix = null;
     }
@@ -40,16 +43,13 @@ export class Painter {
   }
 
   private pencilPattern(color: string): CanvasPattern | null {
-    let p = this.patterns.get(color);
-    if (p) return p;
-    p = this.ctx.createPattern(grainTile(color) as CanvasImageSource, 'repeat') ?? undefined;
-    if (!p) return null;
+    if (this.patterns.has(color)) return this.patterns.get(color)!;
+    let p: CanvasPattern | null = null;
     if (this.patternMatrix) {
-      try {
-        p.setTransform(this.patternMatrix);
-      } catch {
-        /* older Safari: grain stays screen-aligned */
-      }
+      p = this.ctx.createPattern(grain.tile(color) as CanvasImageSource, 'repeat');
+      // Without pattern transforms the grain can't follow the paper; plain graphite then.
+      if (p && typeof p.setTransform === 'function') p.setTransform(this.patternMatrix);
+      else p = null;
     }
     this.patterns.set(color, p);
     return p;
@@ -60,17 +60,30 @@ export class Painter {
     const s = e.style;
     const color = penColor(s);
     const w = this.effectiveWidth(s.width);
-    ctx.lineWidth = w;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.setLineDash(dashArray(s.lineType, w));
+    const dash = dashArray(s.lineType, w);
+
     if (s.pen === 'pencil') {
       ctx.globalAlpha = alpha * PENCIL_ALPHA;
-      ctx.strokeStyle = this.pencilPattern(color) ?? color;
+      const paint = this.pencilPattern(color) ?? color;
+      const amp = roughAmpAtScale(s.width, this.scale);
+      if (amp > 0) {
+        // Up close: ragged graphite edge, filled as one outline.
+        ctx.fillStyle = paint;
+        ctx.beginPath();
+        traceRough(ctx, e, { width: w, dash, amp, pxPerMm: this.scale, view: this.view, seed: hashString(e.id) });
+        ctx.fill('nonzero');
+        ctx.globalAlpha = 1;
+        return;
+      }
+      ctx.strokeStyle = paint;
     } else {
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = color;
     }
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.setLineDash(dash);
     ctx.beginPath();
     traceEntity(ctx, e);
     ctx.stroke();

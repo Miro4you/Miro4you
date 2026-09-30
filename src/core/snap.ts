@@ -81,6 +81,19 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
 
 export type AngleMode = 'snap' | 'show' | 'off';
 
+/**
+ * Gentle magnet towards the main directions (every 45°): only pulls when the
+ * direction start→end is within `tolDeg` of one, otherwise returns `end` unchanged.
+ */
+export function softSnapAngle(start: Vec, end: Vec, tolDeg: number, stepDeg = 45): Vec {
+  const l = dist(start, end);
+  if (l === 0) return { ...end };
+  const deg = drawingAngleDeg(start, end);
+  const target = Math.round(deg / stepDeg) * stepDeg;
+  if (Math.abs(deg - target) > tolDeg) return { ...end };
+  return polar(start, target, l);
+}
+
 /** Round the direction start→end to a multiple of `stepDeg`, keeping the length. */
 export function snapAngle(start: Vec, end: Vec, stepDeg: number): Vec {
   const l = dist(start, end);

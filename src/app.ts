@@ -2,7 +2,7 @@ import { Camera } from './core/camera';
 import { entityBox, SketchDocument } from './core/document';
 import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from './core/geom';
 import { DEFAULT_STYLE } from './core/pens';
-import { findSnap, snapAngle, type AngleMode, type SnapHit } from './core/snap';
+import { findSnap, snapAngle, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import type { Entity, Style } from './core/types';
 import { formatAngle, formatLength } from './render/overlay';
 import { Painter } from './render/painter';
@@ -28,6 +28,8 @@ export interface Settings {
 }
 
 export const ANGLE_STEP = 5;
+/** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
+export const SOFT_ANGLE_TOL = 1;
 /** CSS px per mm at 100 % zoom (96 dpi). */
 export const MM_PX = 96 / 25.4;
 const SNAP_PX: Record<PointerKind, number> = { pen: 12, mouse: 10, touch: 20 };
@@ -236,10 +238,9 @@ export class App {
   ): { p: Vec; hit: SnapHit | null } {
     const s = this.snapPoint(world, pointerType, exclude);
     if (s.hit && dist(s.hit.p, anchor) > 1e-9) return s;
-    if (this.settings.angleMode === 'snap' && !this.snapSuspended) {
-      return { p: snapAngle(anchor, world, ANGLE_STEP), hit: null };
-    }
-    return { p: world, hit: null };
+    if (this.snapSuspended) return { p: world, hit: null };
+    if (this.settings.angleMode === 'snap') return { p: snapAngle(anchor, world, ANGLE_STEP), hit: null };
+    return { p: softSnapAngle(anchor, world, SOFT_ANGLE_TOL), hit: null };
   }
 
   measureText(a: Vec, b: Vec): string {
@@ -318,7 +319,7 @@ export class App {
 
   /** Paint an entity preview in world space onto the overlay (used by tools). */
   paintWorld(e: Entity): void {
-    this.overlayPainter.begin(this.cam, this.dpr);
+    this.overlayPainter.begin(this.cam, this.dpr, this.cam.visibleBox(this.width, this.height));
     this.overlayPainter.draw(e);
     this.overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }

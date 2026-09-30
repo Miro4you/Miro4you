@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SketchDocument } from '../src/core/document';
 import { drawingAngleDeg } from '../src/core/geom';
-import { findSnap, snapAngle } from '../src/core/snap';
+import { findSnap, snapAngle, softSnapAngle } from '../src/core/snap';
 import type { LineEntity } from '../src/core/types';
 
 const all = { end: true, mid: true, int: true };
@@ -52,5 +52,23 @@ describe('snapping', () => {
     const p = snapAngle(s, { x: 10, y: -3.4 }, 5); // ≈ 18.8°
     expect(drawingAngleDeg(s, p)).toBeCloseTo(20);
     expect(Math.hypot(p.x, p.y)).toBeCloseTo(Math.hypot(10, 3.4));
+  });
+});
+
+describe('soft angle snap', () => {
+  const s = { x: 0, y: 0 };
+  const at = (deg: number) => ({ x: 50 * Math.cos((deg * Math.PI) / 180), y: -50 * Math.sin((deg * Math.PI) / 180) });
+
+  it('settles onto 0°, 45° and 90° within the tolerance', () => {
+    expect(drawingAngleDeg(s, softSnapAngle(s, at(0.8), 1))).toBeCloseTo(0);
+    expect(drawingAngleDeg(s, softSnapAngle(s, at(359.3), 1))).toBeCloseTo(0);
+    expect(drawingAngleDeg(s, softSnapAngle(s, at(44.2), 1))).toBeCloseTo(45);
+    expect(drawingAngleDeg(s, softSnapAngle(s, at(90.9), 1))).toBeCloseTo(90);
+  });
+
+  it('leaves every other direction untouched', () => {
+    const p = at(1.5);
+    expect(softSnapAngle(s, p, 1)).toEqual(p);
+    expect(drawingAngleDeg(s, softSnapAngle(s, at(37), 1))).toBeCloseTo(37);
   });
 });

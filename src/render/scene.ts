@@ -30,7 +30,7 @@ export class SceneRenderer {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const view = cam.visibleBox(width, height);
-    this.painter.begin(cam, dpr);
+    this.painter.begin(cam, dpr, view);
     if (opts.grid) drawGrid(ctx, cam, view);
 
     const byLayer = doc.byLayer();
