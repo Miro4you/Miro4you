@@ -334,6 +334,7 @@ export class InputController {
     this.setAlt(e.altKey);
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    if (target?.closest?.('dialog')) return;
     const mod = e.metaKey || e.ctrlKey;
     const app = this.app;
 

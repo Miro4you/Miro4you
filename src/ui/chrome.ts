@@ -1,6 +1,7 @@
 import { MM_PX, type App } from '../app';
 import { newId } from '../core/document';
 import type { Layer } from '../core/types';
+import { ask, askText } from './dialogs';
 import { h } from './dom';
 import { icons } from './icons';
 
@@ -90,9 +91,9 @@ export class LayersPanel {
     const down = h('button', { class: 'btn', title: 'Ebene nach unten', html: icons.down });
     down.addEventListener('click', () => this.move(-1));
     const rename = h('button', { class: 'btn', title: 'Umbenennen', html: icons.rename });
-    rename.addEventListener('click', () => this.rename(app.doc.activeLayerId));
+    rename.addEventListener('click', () => void this.rename(app.doc.activeLayerId));
     const del = h('button', { class: 'btn danger', title: 'Ebene löschen', html: icons.trash });
-    del.addEventListener('click', () => this.remove());
+    del.addEventListener('click', () => void this.remove());
     this.el.append(
       h('div', { class: 'popover-head' }, [h('span', { text: 'Ebenen' })]),
       this.list,
@@ -140,7 +141,7 @@ export class LayersPanel {
         });
         const name = h('div', { class: 'layer-label' }, [
           h('span', { class: 'n', text: l.name }),
-          h('span', { class: 'c', text: `${counts.get(l.id) ?? 0} Objekte` }),
+          h('span', { class: 'c', text: `${counts.get(l.id) ?? 0} ${counts.get(l.id) === 1 ? 'Objekt' : 'Objekte'}` }),
         ]);
         const dim = h('button', { class: `icon-btn${l.dimmed ? ' on' : ''}`, title: l.dimmed ? 'Normal anzeigen' : 'Blass anzeigen', html: icons.dim });
         dim.addEventListener('click', (e) => {
@@ -154,7 +155,7 @@ export class LayersPanel {
         });
         row.append(vis, name, dim, lock);
         row.addEventListener('click', () => doc.setActiveLayer(l.id));
-        row.addEventListener('dblclick', () => this.rename(l.id));
+        row.addEventListener('dblclick', () => void this.rename(l.id));
         return row;
       }),
     );
@@ -180,16 +181,16 @@ export class LayersPanel {
     doc.setLayers(layers);
   }
 
-  private rename(id: string): void {
+  private async rename(id: string): Promise<void> {
     const doc = this.app.doc;
     const l = doc.layer(id);
     if (!l) return;
-    const name = window.prompt('Name der Ebene', l.name)?.trim();
-    if (!name || name === l.name) return;
+    const name = await askText('Ebene umbenennen', l.name, 'Umbenennen');
+    if (!name || name === l.name || !doc.layer(id)) return;
     doc.setLayers(doc.layers.map((x) => (x.id === id ? { ...x, name } : x)));
   }
 
-  private remove(): void {
+  private async remove(): Promise<void> {
     const doc = this.app.doc;
     if (doc.layers.length <= 1) {
       this.app.toast('Die letzte Ebene kann nicht gelöscht werden');
@@ -197,7 +198,17 @@ export class LayersPanel {
     }
     const l = doc.activeLayer;
     const count = doc.byLayer().get(l.id)?.length ?? 0;
-    if (count > 0 && !window.confirm(`Ebene „${l.name}“ mit ${count} Objekten löschen?`)) return;
+    if (
+      count > 0 &&
+      !(await ask({
+        title: 'Ebene löschen?',
+        message: `„${l.name}“ enthält ${count} ${count === 1 ? 'Objekt' : 'Objekte'}. Du kannst das Löschen rückgängig machen.`,
+        confirm: 'Löschen',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     doc.deleteLayer(l.id);
   }
 }

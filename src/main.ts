@@ -3,6 +3,7 @@ import { App } from './app';
 import { InputController } from './input/input';
 import { helpDialog, LayersPanel, Menu, Toast, ViewBar } from './ui/chrome';
 import { h } from './ui/dom';
+import { ask } from './ui/dialogs';
 import { Palette } from './ui/palette';
 
 const root = document.getElementById('app')!;
@@ -37,6 +38,18 @@ fileInput.addEventListener('change', async () => {
   if (!file) return;
   try {
     const data: unknown = JSON.parse(await file.text());
+    // Ask after picking (the file picker itself must open straight from the tap on iOS).
+    if (
+      app.doc.size > 0 &&
+      !(await ask({
+        title: 'Zeichnung ersetzen?',
+        message: `„${file.name}“ ersetzt die aktuelle Zeichnung. Lade sie vorher herunter, wenn du sie behalten willst.`,
+        confirm: 'Ersetzen',
+        danger: true,
+      }))
+    ) {
+      return;
+    }
     app.loadDrawing(data);
     app.toast(`„${file.name}“ geöffnet`);
   } catch (err) {
@@ -45,12 +58,21 @@ fileInput.addEventListener('change', async () => {
 });
 
 function open(): void {
-  if (app.doc.size > 0 && !window.confirm('Die aktuelle Zeichnung wird ersetzt. Vorher herunterladen, falls du sie behalten willst. Fortfahren?')) return;
   fileInput.click();
 }
 
-function newDrawing(): void {
-  if (app.doc.size > 0 && !window.confirm('Neue Zeichnung beginnen? Die aktuelle wird verworfen.')) return;
+async function newDrawing(): Promise<void> {
+  if (
+    app.doc.size > 0 &&
+    !(await ask({
+      title: 'Neue Zeichnung?',
+      message: 'Die aktuelle Zeichnung wird verworfen. Lade sie vorher herunter, wenn du sie behalten willst.',
+      confirm: 'Neue Zeichnung',
+      danger: true,
+    }))
+  ) {
+    return;
+  }
   app.newDrawing();
 }
 
@@ -63,7 +85,7 @@ const toast = new Toast();
 app.setToast((m) => toast.show(m));
 const help = helpDialog();
 const layers = new LayersPanel(app);
-const menu = new Menu(app, { newDrawing, open, download, help: () => help.showModal() });
+const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, help: () => help.showModal() });
 const viewBar = new ViewBar(app, layers, menu);
 const palette = new Palette(app);
 const snapHint = h('div', { class: 'snap-hint', text: 'Fang pausiert' });
