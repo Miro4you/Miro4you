@@ -1,0 +1,304 @@
+import { MM_PX, type App } from '../app';
+import { newId } from '../core/document';
+import type { Layer } from '../core/types';
+import { h } from './dom';
+import { icons } from './icons';
+
+function setText(el: HTMLElement, text: string): void {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+// ---- toast -------------------------------------------------------------------------
+
+export class Toast {
+  readonly el = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite' });
+  private timer: number | undefined;
+
+  show(msg: string): void {
+    this.el.textContent = msg;
+    this.el.classList.add('show');
+    window.clearTimeout(this.timer);
+    this.timer = window.setTimeout(() => this.el.classList.remove('show'), 1800);
+  }
+}
+
+// ---- view bar (top right) ----------------------------------------------------------
+
+export class ViewBar {
+  readonly el: HTMLElement;
+  private compass: HTMLButtonElement;
+  private zoom: HTMLButtonElement;
+  private layerBtn: HTMLButtonElement;
+  private layerName: HTMLElement;
+
+  constructor(
+    private app: App,
+    private layersPanel: LayersPanel,
+    menu: Menu,
+  ) {
+    const layers = layersPanel;
+    this.compass = h('button', { class: 'btn', title: 'Ansicht gerade stellen (R)' });
+    this.compass.addEventListener('click', () => app.resetRotation());
+    this.zoom = h('button', { class: 'btn zoom', title: 'Alles zeigen (0)' });
+    this.zoom.addEventListener('click', () => app.fitAll());
+    this.layerName = h('span', { class: 'layer-name' });
+    this.layerBtn = h('button', { class: 'btn wide', title: 'Ebenen', html: icons.layers });
+    this.layerBtn.append(this.layerName);
+    this.layerBtn.addEventListener('click', () => {
+      menu.close();
+      layers.toggle();
+      this.update();
+    });
+    const menuBtn = h('button', { class: 'btn', title: 'Menü', html: icons.more });
+    menuBtn.addEventListener('click', () => {
+      layers.close();
+      menu.toggle();
+    });
+    this.el = h('div', { class: 'viewbar panel' }, [this.compass, this.zoom, this.layerBtn, menuBtn]);
+    app.onUiChange(() => this.update());
+    app.onViewChange(() => this.update());
+    layers.onToggle = () => this.update();
+  }
+
+  private lastDeg = NaN;
+
+  update(): void {
+    const deg = (this.app.cam.rot * 180) / Math.PI;
+    if (deg !== this.lastDeg) {
+      this.lastDeg = deg;
+      this.compass.innerHTML = icons.compass(deg);
+    }
+    setText(this.zoom, `${Math.round((this.app.cam.scale / MM_PX) * 100)} %`);
+    setText(this.layerName, this.app.doc.activeLayer.name);
+    this.layerBtn.classList.toggle('active', this.layersPanel.isOpen);
+  }
+}
+
+// ---- layers panel ------------------------------------------------------------------------
+
+export class LayersPanel {
+  readonly el = h('div', { class: 'layers panel popover', role: 'dialog', 'aria-label': 'Ebenen' });
+  private list = h('div', { class: 'layer-list' });
+  isOpen = false;
+  onToggle: () => void = () => {};
+
+  constructor(private app: App) {
+    const add = h('button', { class: 'btn', title: 'Neue Ebene', html: icons.plus });
+    add.addEventListener('click', () => this.addLayer());
+    const up = h('button', { class: 'btn', title: 'Ebene nach oben', html: icons.up });
+    up.addEventListener('click', () => this.move(1));
+    const down = h('button', { class: 'btn', title: 'Ebene nach unten', html: icons.down });
+    down.addEventListener('click', () => this.move(-1));
+    const rename = h('button', { class: 'btn', title: 'Umbenennen', html: icons.rename });
+    rename.addEventListener('click', () => this.rename(app.doc.activeLayerId));
+    const del = h('button', { class: 'btn danger', title: 'Ebene löschen', html: icons.trash });
+    del.addEventListener('click', () => this.remove());
+    this.el.append(
+      h('div', { class: 'popover-head' }, [h('span', { text: 'Ebenen' })]),
+      this.list,
+      h('div', { class: 'layer-actions' }, [add, up, down, rename, del]),
+    );
+    app.onUiChange(() => this.isOpen && this.render());
+  }
+
+  toggle(): void {
+    if (this.isOpen) this.close();
+    else this.open();
+  }
+
+  open(): void {
+    this.isOpen = true;
+    this.el.classList.add('open');
+    this.render();
+    this.onToggle();
+  }
+
+  close(): void {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    this.el.classList.remove('open');
+    this.onToggle();
+  }
+
+  private renderedKey = '';
+
+  private render(): void {
+    const doc = this.app.doc;
+    const counts = new Map<string, number>();
+    for (const [id, arr] of doc.byLayer()) counts.set(id, arr.length);
+    // Skip rebuilding the rows when nothing visible changed (e.g. while dragging).
+    const key = JSON.stringify([doc.activeLayerId, doc.layers, [...counts]]);
+    if (key === this.renderedKey) return;
+    this.renderedKey = key;
+    this.list.replaceChildren(
+      ...[...doc.layers].reverse().map((l) => {
+        const row = h('div', { class: `layer-row${l.id === doc.activeLayerId ? ' active' : ''}${l.visible ? '' : ' hidden'}` });
+        const vis = h('button', { class: 'icon-btn', title: l.visible ? 'Ausblenden' : 'Einblenden', html: l.visible ? icons.eye : icons.eyeOff });
+        vis.addEventListener('click', (e) => {
+          e.stopPropagation();
+          doc.patchLayerView(l.id, { visible: !l.visible });
+        });
+        const name = h('div', { class: 'layer-label' }, [
+          h('span', { class: 'n', text: l.name }),
+          h('span', { class: 'c', text: `${counts.get(l.id) ?? 0} Objekte` }),
+        ]);
+        const dim = h('button', { class: `icon-btn${l.dimmed ? ' on' : ''}`, title: l.dimmed ? 'Normal anzeigen' : 'Blass anzeigen', html: icons.dim });
+        dim.addEventListener('click', (e) => {
+          e.stopPropagation();
+          doc.patchLayerView(l.id, { dimmed: !l.dimmed });
+        });
+        const lock = h('button', { class: `icon-btn${l.locked ? ' on' : ''}`, title: l.locked ? 'Entsperren' : 'Sperren', html: l.locked ? icons.lock : icons.unlock });
+        lock.addEventListener('click', (e) => {
+          e.stopPropagation();
+          doc.patchLayerView(l.id, { locked: !l.locked });
+        });
+        row.append(vis, name, dim, lock);
+        row.addEventListener('click', () => doc.setActiveLayer(l.id));
+        row.addEventListener('dblclick', () => this.rename(l.id));
+        return row;
+      }),
+    );
+  }
+
+  private addLayer(): void {
+    const doc = this.app.doc;
+    const idx = doc.layers.findIndex((l) => l.id === doc.activeLayerId);
+    const n = doc.layers.length + 1;
+    const layer: Layer = { id: newId('L'), name: `Ebene ${n}`, visible: true, locked: false, dimmed: false };
+    const layers = [...doc.layers];
+    layers.splice(idx + 1, 0, layer);
+    doc.setLayers(layers, layer.id);
+  }
+
+  private move(dir: 1 | -1): void {
+    const doc = this.app.doc;
+    const idx = doc.layers.findIndex((l) => l.id === doc.activeLayerId);
+    const j = idx + dir;
+    if (idx < 0 || j < 0 || j >= doc.layers.length) return;
+    const layers = [...doc.layers];
+    [layers[idx], layers[j]] = [layers[j], layers[idx]];
+    doc.setLayers(layers);
+  }
+
+  private rename(id: string): void {
+    const doc = this.app.doc;
+    const l = doc.layer(id);
+    if (!l) return;
+    const name = window.prompt('Name der Ebene', l.name)?.trim();
+    if (!name || name === l.name) return;
+    doc.setLayers(doc.layers.map((x) => (x.id === id ? { ...x, name } : x)));
+  }
+
+  private remove(): void {
+    const doc = this.app.doc;
+    if (doc.layers.length <= 1) {
+      this.app.toast('Die letzte Ebene kann nicht gelöscht werden');
+      return;
+    }
+    const l = doc.activeLayer;
+    const count = doc.byLayer().get(l.id)?.length ?? 0;
+    if (count > 0 && !window.confirm(`Ebene „${l.name}“ mit ${count} Objekten löschen?`)) return;
+    doc.deleteLayer(l.id);
+  }
+}
+
+// ---- menu --------------------------------------------------------------------------------
+
+export class Menu {
+  readonly el = h('div', { class: 'menu panel popover', role: 'menu' });
+  private toggles = new Map<string, HTMLButtonElement>();
+  isOpen = false;
+
+  constructor(
+    private app: App,
+    actions: { newDrawing: () => void; open: () => void; download: () => void; help: () => void },
+  ) {
+    const item = (label: string, fn: () => void, hint = '') => {
+      const b = h('button', { class: 'menu-item', role: 'menuitem' }, [h('span', { text: label }), h('kbd', { text: hint })]);
+      b.addEventListener('click', () => {
+        this.close();
+        fn();
+      });
+      return b;
+    };
+    const toggle = (key: 'grid' | 'handles' | 'fingerDraws' | 'rotate', label: string) => {
+      const b = h('button', { class: 'menu-item toggle-item', role: 'menuitemcheckbox' }, [h('span', { text: label }), h('span', { class: 'switch' })]);
+      b.addEventListener('click', () => app.updateSettings({ [key]: !app.settings[key] }));
+      this.toggles.set(key, b);
+      return b;
+    };
+    this.el.append(
+      item('Neue Zeichnung', actions.newDrawing),
+      item('Datei öffnen …', actions.open, '⌘O'),
+      item('Datei herunterladen', actions.download, '⌘S'),
+      h('div', { class: 'menu-sep' }),
+      toggle('grid', 'Raster'),
+      toggle('handles', 'Griffe an Linienenden'),
+      toggle('rotate', 'Drehen mit zwei Fingern'),
+      toggle('fingerDraws', 'Mit dem Finger zeichnen'),
+      h('div', { class: 'menu-sep' }),
+      item('Bedienung & Kurzbefehle', actions.help, '?'),
+    );
+    app.onUiChange(() => this.update());
+    this.update();
+  }
+
+  private update(): void {
+    for (const [key, b] of this.toggles) {
+      const on = this.app.settings[key as 'grid' | 'handles' | 'fingerDraws' | 'rotate'];
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+    }
+  }
+
+  toggle(): void {
+    if (this.isOpen) this.close();
+    else {
+      this.isOpen = true;
+      this.el.classList.add('open');
+    }
+  }
+
+  close(): void {
+    this.isOpen = false;
+    this.el.classList.remove('open');
+  }
+}
+
+// ---- help --------------------------------------------------------------------------------
+
+export function helpDialog(): HTMLDialogElement {
+  const rows: [string, string][] = [
+    ['Apple Pencil / Maus', 'Zeichnen mit dem aktiven Werkzeug'],
+    ['Ein Finger ziehen', 'Ansicht verschieben'],
+    ['Zwei Finger', 'Verschieben, zoomen, drehen (rastet bei 0°/45°/90° ein)'],
+    ['Zwei-Finger-Tipp', 'Rückgängig'],
+    ['Drei-Finger-Tipp', 'Wiederholen'],
+    ['Finger halten beim Zeichnen', 'Fang kurz aussetzen'],
+    ['Mausrad', 'Zoomen'],
+    ['Leertaste + Ziehen, mittlere/rechte Maustaste', 'Ansicht verschieben'],
+    ['Alt halten', 'Fang kurz aussetzen'],
+    ['F / L', 'Freihand / Linie'],
+    ['1–4 · 5–9', 'Bleistift 0,3–0,9 · Tusche 0,18–0,7'],
+    ['⇧1–⇧5', 'Linienart'],
+    ['S · A · G', 'Fang · Winkelmodus · Raster'],
+    ['0 · R', 'Alles zeigen · Ansicht gerade'],
+    ['⌘Z · ⇧⌘Z', 'Rückgängig · Wiederholen'],
+    ['⌘S · ⌘O', 'Herunterladen · Öffnen'],
+    ['Esc', 'Aktion abbrechen'],
+  ];
+  const close = h('button', { class: 'btn', title: 'Schließen', html: icons.close });
+  const dlg = h('dialog', { class: 'help panel' }, [
+    h('div', { class: 'popover-head' }, [h('span', { text: 'Bedienung & Kurzbefehle' }), close]),
+    h(
+      'table',
+      {},
+      rows.map(([k, v]) => h('tr', {}, [h('th', { text: k }), h('td', { text: v })])),
+    ),
+  ]);
+  close.addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', (e) => {
+    if (e.target === dlg) dlg.close();
+  });
+  return dlg;
+}

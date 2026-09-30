@@ -1,0 +1,372 @@
+import { boxAddPoint, emptyBox, type Box } from './geom';
+import type { DocFile, Entity, Layer, ViewState } from './types';
+
+type Change =
+  | { t: 'add'; e: Entity }
+  | { t: 'del'; e: Entity }
+  | { t: 'upd'; before: Entity; after: Entity }
+  | { t: 'layers'; before: Layer[]; after: Layer[]; activeBefore: string; activeAfter: string };
+
+let idCounter = 0;
+export function newId(prefix: string): string {
+  idCounter = (idCounter + 1) % 1e6;
+  return `${prefix}${Date.now().toString(36)}${idCounter.toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
+}
+
+const MAX_HISTORY = 300;
+const bboxCache = new WeakMap<Entity, Box>();
+
+/** Axis-aligned bounds of an entity's geometry (without line width). Cached per immutable entity object. */
+export function entityBox(e: Entity): Box {
+  let bx = bboxCache.get(e);
+  if (bx) return bx;
+  bx = emptyBox();
+  if (e.kind === 'line') {
+    boxAddPoint(bx, e.a.x, e.a.y);
+    boxAddPoint(bx, e.b.x, e.b.y);
+  } else {
+    for (let i = 0; i < e.pts.length; i += 2) boxAddPoint(bx, e.pts[i], e.pts[i + 1]);
+  }
+  bboxCache.set(e, bx);
+  return bx;
+}
+
+/**
+ * The drawing: layers plus entities, with transactional undo/redo.
+ * Entities are treated as immutable – updates replace the object.
+ */
+export class SketchDocument {
+  layers: Layer[] = [];
+  activeLayerId = '';
+  /** Bumped on every change; renderers and autosave compare against it. */
+  version = 0;
+
+  private entities = new Map<string, Entity>();
+  private nextZ = 1;
+  private undoStack: Change[][] = [];
+  private redoStack: Change[][] = [];
+  private pending: Change[] | null = null;
+  private byLayerCache: { version: number; map: Map<string, Entity[]> } | null = null;
+  private listeners = new Set<() => void>();
+
+  constructor() {
+    this.reset();
+  }
+
+  /** Fresh drawing with a sketch layer and a clean-drawing layer. */
+  reset(): void {
+    const sketch: Layer = { id: newId('L'), name: 'Skizze', visible: true, locked: false, dimmed: false };
+    const clean: Layer = { id: newId('L'), name: 'Reinzeichnung', visible: true, locked: false, dimmed: false };
+    this.layers = [sketch, clean];
+    this.activeLayerId = sketch.id;
+    this.entities.clear();
+    this.nextZ = 1;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.pending = null;
+    this.touch();
+  }
+
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private touch(): void {
+    this.version++;
+    for (const fn of this.listeners) fn();
+  }
+
+  // ---- queries -------------------------------------------------------------
+
+  get(id: string): Entity | undefined {
+    return this.entities.get(id);
+  }
+
+  all(): IterableIterator<Entity> {
+    return this.entities.values();
+  }
+
+  get size(): number {
+    return this.entities.size;
+  }
+
+  layer(id: string): Layer | undefined {
+    return this.layers.find((l) => l.id === id);
+  }
+
+  get activeLayer(): Layer {
+    return this.layer(this.activeLayerId) ?? this.layers[this.layers.length - 1];
+  }
+
+  /** Entities grouped per layer, sorted by z. Rebuilt lazily after changes. */
+  byLayer(): Map<string, Entity[]> {
+    if (this.byLayerCache && this.byLayerCache.version === this.version) return this.byLayerCache.map;
+    const map = new Map<string, Entity[]>();
+    for (const l of this.layers) map.set(l.id, []);
+    for (const e of this.entities.values()) {
+      let arr = map.get(e.layerId);
+      if (!arr) map.set(e.layerId, (arr = []));
+      arr.push(e);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.z - b.z);
+    this.byLayerCache = { version: this.version, map };
+    return map;
+  }
+
+  /** Entities on visible layers (optionally only unlocked ones). */
+  *visibleEntities(includeLocked = true): Generator<Entity> {
+    const byLayer = this.byLayer();
+    for (const l of this.layers) {
+      if (!l.visible || (!includeLocked && l.locked)) continue;
+      const arr = byLayer.get(l.id);
+      if (arr) yield* arr;
+    }
+  }
+
+  allocZ(): number {
+    return this.nextZ++;
+  }
+
+  // ---- mutations -----------------------------------------------------------
+
+  /** Groups subsequent mutations into one undo step until `commit()`. */
+  begin(): void {
+    if (!this.pending) this.pending = [];
+  }
+
+  commit(): void {
+    const changes = this.pending;
+    this.pending = null;
+    if (!changes || changes.length === 0) return;
+    this.undoStack.push(changes);
+    if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
+    this.redoStack = [];
+  }
+
+  private record(c: Change): void {
+    if (this.pending) {
+      this.pending.push(c);
+    } else {
+      this.undoStack.push([c]);
+      if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
+      this.redoStack = [];
+    }
+  }
+
+  add(e: Entity): void {
+    this.entities.set(e.id, e);
+    this.record({ t: 'add', e });
+    this.touch();
+  }
+
+  remove(id: string): void {
+    const e = this.entities.get(id);
+    if (!e) return;
+    this.entities.delete(id);
+    this.record({ t: 'del', e });
+    this.touch();
+  }
+
+  /**
+   * Replace an entity. `before` defaults to the current object; pass it explicitly
+   * after a series of `replaceTransient` calls (live dragging) so undo restores the start state.
+   */
+  update(after: Entity, before?: Entity): void {
+    const prev = before ?? this.entities.get(after.id);
+    if (!prev) return;
+    this.entities.set(after.id, after);
+    this.record({ t: 'upd', before: prev, after });
+    this.touch();
+  }
+
+  /** Replace without recording history (for live previews while dragging). */
+  replaceTransient(e: Entity): void {
+    if (!this.entities.has(e.id)) return;
+    this.entities.set(e.id, e);
+    this.touch();
+  }
+
+  setLayers(layers: Layer[], activeLayerId = this.activeLayerId): void {
+    const c: Change = {
+      t: 'layers',
+      before: this.layers,
+      after: layers,
+      activeBefore: this.activeLayerId,
+      activeAfter: activeLayerId,
+    };
+    this.layers = layers;
+    this.activeLayerId = activeLayerId;
+    this.record(c);
+    this.touch();
+  }
+
+  /**
+   * Change display flags (visible / locked / dimmed) of a layer. Like in other
+   * drawing apps these are not undo steps – undo only covers drawing and layer structure.
+   */
+  patchLayerView(id: string, patch: Partial<Pick<Layer, 'visible' | 'locked' | 'dimmed'>>): void {
+    this.layers = this.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
+    this.touch();
+  }
+
+  /** Change the active layer (not an undoable edit). */
+  setActiveLayer(id: string): void {
+    if (this.activeLayerId === id || !this.layer(id)) return;
+    this.activeLayerId = id;
+    this.touch();
+  }
+
+  /** Delete a layer together with its entities, as one undo step. */
+  deleteLayer(id: string): void {
+    if (this.layers.length <= 1) return;
+    const idx = this.layers.findIndex((l) => l.id === id);
+    if (idx < 0) return;
+    this.begin();
+    for (const e of [...this.entities.values()]) if (e.layerId === id) this.remove(e.id);
+    const layers = this.layers.filter((l) => l.id !== id);
+    const active = this.activeLayerId === id ? layers[Math.min(idx, layers.length - 1)].id : this.activeLayerId;
+    this.setLayers(layers, active);
+    this.commit();
+  }
+
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  get canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  undo(): boolean {
+    this.commit();
+    const changes = this.undoStack.pop();
+    if (!changes) return false;
+    for (let i = changes.length - 1; i >= 0; i--) this.apply(changes[i], true);
+    this.redoStack.push(changes);
+    this.touch();
+    return true;
+  }
+
+  redo(): boolean {
+    this.commit();
+    const changes = this.redoStack.pop();
+    if (!changes) return false;
+    for (const c of changes) this.apply(c, false);
+    this.undoStack.push(changes);
+    this.touch();
+    return true;
+  }
+
+  private apply(c: Change, inverse: boolean): void {
+    switch (c.t) {
+      case 'add':
+        if (inverse) this.entities.delete(c.e.id);
+        else this.entities.set(c.e.id, c.e);
+        break;
+      case 'del':
+        if (inverse) this.entities.set(c.e.id, c.e);
+        else this.entities.delete(c.e.id);
+        break;
+      case 'upd':
+        this.entities.set(c.after.id, inverse ? c.before : c.after);
+        break;
+      case 'layers': {
+        // Keep the current display flags; history only restores structure and names.
+        const flags = new Map(this.layers.map((l) => [l.id, l]));
+        this.layers = (inverse ? c.before : c.after).map((l) => {
+          const cur = flags.get(l.id);
+          return cur ? { ...l, visible: cur.visible, locked: cur.locked, dimmed: cur.dimmed } : l;
+        });
+        this.activeLayerId = inverse ? c.activeBefore : c.activeAfter;
+        if (!this.layer(this.activeLayerId)) this.activeLayerId = this.layers[0].id;
+        break;
+      }
+    }
+  }
+
+  // ---- (de)serialisation ---------------------------------------------------
+
+  toFile(view?: ViewState): DocFile {
+    const round = (v: number) => Math.round(v * 1000) / 1000;
+    const entities = [...this.entities.values()]
+      .sort((a, b) => a.z - b.z)
+      .map((e): Entity => {
+        if (e.kind === 'line') {
+          return { ...e, a: { x: round(e.a.x), y: round(e.a.y) }, b: { x: round(e.b.x), y: round(e.b.y) } };
+        }
+        return { ...e, pts: e.pts.map(round) };
+      });
+    return {
+      format: 'skizzen-cad',
+      version: 1,
+      layers: this.layers.map((l) => ({ ...l })),
+      activeLayerId: this.activeLayerId,
+      entities,
+      nextZ: this.nextZ,
+      view,
+    };
+  }
+
+  /** Load a file; throws on invalid input. Clears the undo history. Returns the validated file. */
+  loadFile(data: unknown): DocFile {
+    const f = validateFile(data);
+    this.layers = f.layers;
+    this.activeLayerId = f.layers.some((l) => l.id === f.activeLayerId) ? f.activeLayerId : f.layers[0].id;
+    this.entities.clear();
+    let maxZ = 0;
+    for (const e of f.entities) {
+      this.entities.set(e.id, e);
+      maxZ = Math.max(maxZ, e.z);
+    }
+    this.nextZ = Math.max(f.nextZ || 0, maxZ + 1);
+    this.undoStack = [];
+    this.redoStack = [];
+    this.pending = null;
+    this.touch();
+    return f;
+  }
+}
+
+function isNum(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isVec(v: unknown): boolean {
+  return !!v && typeof v === 'object' && isNum((v as { x: unknown }).x) && isNum((v as { y: unknown }).y);
+}
+
+export function validateFile(data: unknown): DocFile {
+  const f = data as Partial<DocFile>;
+  if (!f || typeof f !== 'object' || f.format !== 'skizzen-cad') throw new Error('Keine Skizzen-CAD-Datei');
+  if (f.version !== 1) throw new Error(`Unbekannte Dateiversion ${String(f.version)}`);
+  if (!Array.isArray(f.layers) || f.layers.length === 0) throw new Error('Datei enthält keine Ebenen');
+  if (!Array.isArray(f.entities)) throw new Error('Datei enthält keine Objekte');
+  const layerIds = new Set<string>();
+  const layers: Layer[] = f.layers.map((l, i) => {
+    if (!l || typeof l.id !== 'string') throw new Error('Ungültige Ebene');
+    layerIds.add(l.id);
+    return {
+      id: l.id,
+      name: typeof l.name === 'string' ? l.name : `Ebene ${i + 1}`,
+      visible: l.visible !== false,
+      locked: !!l.locked,
+      dimmed: !!l.dimmed,
+    };
+  });
+  const entities: Entity[] = [];
+  for (const e of f.entities) {
+    if (!e || typeof e.id !== 'string' || !layerIds.has(e.layerId) || !e.style) continue;
+    if (e.kind === 'line' && isVec(e.a) && isVec(e.b)) entities.push(e);
+    else if (e.kind === 'stroke' && Array.isArray(e.pts) && e.pts.length >= 2 && e.pts.every(isNum)) entities.push(e);
+  }
+  return {
+    format: 'skizzen-cad',
+    version: 1,
+    layers,
+    activeLayerId: typeof f.activeLayerId === 'string' ? f.activeLayerId : layers[0].id,
+    entities,
+    nextZ: isNum(f.nextZ) ? f.nextZ : 1,
+    view: f.view && isNum(f.view.scale) && isNum(f.view.rot) && isNum(f.view.tx) && isNum(f.view.ty) ? f.view : undefined,
+  };
+}
