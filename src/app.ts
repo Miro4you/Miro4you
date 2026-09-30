@@ -1,11 +1,11 @@
 import { Camera } from './core/camera';
-import { project } from './core/curves';
+import { intersectSegment, project } from './core/curves';
 import { entityBox, newId, SketchDocument } from './core/document';
 import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from './core/geom';
 import { DEFAULT_STYLE, PAPER_COLORS, setPenTheme, type Theme } from './core/pens';
 import { findSnap, snapAngle, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import { mirrorGroup, transformEntity, type Affine } from './core/transform';
-import type { Entity, HatchPattern, LineEntity, Style } from './core/types';
+import { isAnnotation, type Entity, type HatchPattern, type LineEntity, type Style } from './core/types';
 import { ACCENT, drawMirrorToggle, formatAngle, formatLength } from './render/overlay';
 import { Painter } from './render/painter';
 import { SceneRenderer } from './render/scene';
@@ -505,18 +505,62 @@ export class App {
     return hit ? { p: hit.p, hit } : { p: world, hit: null };
   }
 
-  /** Resolve the moving end of a segment anchored at `anchor`: geometry snap first, then angle snap. */
+  /**
+   * Resolve the moving end of a segment anchored at `anchor`. With the angle snap on
+   * the angle always holds (`holdAngle`, e.g. drawing lines); otherwise, or when
+   * moving things, geometry snaps win and the angle snap applies in between.
+   */
   resolveEnd(
     anchor: Vec,
     world: Vec,
     pointerType: PointerKind,
     exclude?: ReadonlySet<string>,
+    holdAngle = true,
   ): { p: Vec; hit: SnapHit | null } {
     const s = this.snapPoint(world, pointerType, exclude);
+    if (holdAngle && this.settings.angleMode === 'snap' && !this.snapSuspended) {
+      // The angle snap always holds: a snap point only counts when it lies on the
+      // snapped direction; otherwise the end goes where that ray meets the geometry.
+      const step = this.settings.angleStep;
+      const a = snapAngle(anchor, world, step);
+      if (s.hit && s.hit.kind !== 'on' && dist(s.hit.p, anchor) > 1e-9) {
+        const deg = drawingAngleDeg(anchor, s.hit.p);
+        const off = Math.abs(((deg - Math.round(deg / step) * step + 540) % 360) - 180);
+        if (off < 0.05) return s;
+      }
+      if (this.settings.snap) {
+        const r = this.rayHit(anchor, a, this.snapRadius(pointerType) * 1.5, exclude);
+        if (r) return r;
+      }
+      return { p: a, hit: null };
+    }
     if (s.hit && dist(s.hit.p, anchor) > 1e-9) return s;
     if (this.snapSuspended) return { p: world, hit: null };
     if (this.settings.angleMode === 'snap') return { p: snapAngle(anchor, world, this.settings.angleStep), hit: null };
     return { p: softSnapAngle(anchor, world, SOFT_ANGLE_TOL), hit: null };
+  }
+
+  /** Where the ray anchor→target first meets existing geometry near the target (within r). */
+  private rayHit(anchor: Vec, target: Vec, r: number, exclude?: ReadonlySet<string>): { p: Vec; hit: SnapHit } | null {
+    const len = dist(anchor, target);
+    if (len < 1e-9) return null;
+    const u = { x: (target.x - anchor.x) / len, y: (target.y - anchor.y) / len };
+    const far = { x: anchor.x + u.x * (len + 2 * r), y: anchor.y + u.y * (len + 2 * r) };
+    let best: Vec | null = null;
+    let bd = r;
+    for (const e of this.doc.visibleEntities()) {
+      if (exclude?.has(e.id) || isAnnotation(e)) continue;
+      const bx = entityBox(e);
+      if (target.x < bx.minX - r || target.x > bx.maxX + r || target.y < bx.minY - r || target.y > bx.maxY + r) continue;
+      for (const q of intersectSegment(e, anchor, far)) {
+        const d = dist(q, target);
+        if (d <= bd && dist(q, anchor) > 1e-6) {
+          bd = d;
+          best = q;
+        }
+      }
+    }
+    return best ? { p: best, hit: { p: best, kind: 'int' } } : null;
   }
 
   /**

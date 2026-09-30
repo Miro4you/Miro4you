@@ -114,7 +114,7 @@ export class SelectTool implements Tool {
       case 'move': {
         const exclude = new Set(st.before.map((e) => e.id));
         const raw = { x: st.ref.x + ev.world.x - st.press.x, y: st.ref.y + ev.world.y - st.press.y };
-        const r = this.app.resolveEnd(st.ref, raw, ev.pointerType, exclude);
+        const r = this.app.resolveEnd(st.ref, raw, ev.pointerType, exclude, false);
         st.target = r.p;
         st.hit = r.hit;
         const m = translation(r.p.x - st.ref.x, r.p.y - st.ref.y);
