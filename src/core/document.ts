@@ -1,3 +1,4 @@
+import { SHEET_FORMATS } from './annotations';
 import { geomBox } from './curves';
 import type { Box } from './geom';
 import type { DocFile, Entity, Layer, ViewState } from './types';
@@ -317,6 +318,9 @@ export class SketchDocument {
             return { ...e, c: rv(e.c), r: round(e.r), start: Math.round(e.start * 1e7) / 1e7, sweep: Math.round(e.sweep * 1e7) / 1e7 };
           case 'hatch':
             return { ...e, loops: e.loops.map((l) => l.map(round)) };
+          case 'text':
+          case 'sheet':
+            return { ...e, at: rv(e.at) };
           default:
             return e;
         }
@@ -391,6 +395,10 @@ export function validateFile(data: unknown): DocFile {
     } else if (e.kind === 'dim' && isVec(e.p1) && isVec(e.p2) && isNum(e.off)) {
       entities.push(e);
     } else if ((e.kind === 'datum' || e.kind === 'gtol') && isVec(e.at) && isVec(e.p)) {
+      entities.push(e);
+    } else if (e.kind === 'text' && isVec(e.at) && typeof e.text === 'string' && isNum(e.size) && e.size > 0 && isNum(e.angle)) {
+      entities.push(e);
+    } else if (e.kind === 'sheet' && isVec(e.at) && SHEET_FORMATS.includes(e.format) && isNum(e.scale) && e.scale > 0 && e.fields) {
       entities.push(e);
     }
   }

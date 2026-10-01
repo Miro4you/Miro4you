@@ -48,12 +48,24 @@ export function ask(opts: AskOptions): Promise<boolean> {
   });
 }
 
-/** Text input; resolves null on cancel. Empty input gives null too unless `allowEmpty`. */
-export function askText(title: string, value: string, confirm = 'Übernehmen', hint?: string, allowEmpty = false): Promise<string | null> {
+/**
+ * Text input; resolves null on cancel. Empty input gives null too unless
+ * `allowEmpty`. `multiline` uses a text area (Return = new line).
+ */
+export function askText(
+  title: string,
+  value: string,
+  confirm = 'Übernehmen',
+  hint?: string,
+  allowEmpty = false,
+  multiline = false,
+): Promise<string | null> {
   return new Promise((resolve) => {
     const { dlg, body, actions } = baseDialog(title);
     if (hint) body.append(h('p', { text: hint }));
-    const input = h('input', { class: 'dlg-input', type: 'text', id: 'dlg-text', autocomplete: 'off' });
+    const input = multiline
+      ? h('textarea', { class: 'dlg-input dlg-area', id: 'dlg-text', rows: '3', autocomplete: 'off' })
+      : h('input', { class: 'dlg-input', type: 'text', id: 'dlg-text', autocomplete: 'off' });
     input.value = value;
     const form = h('form', { method: 'dialog' }, [input]);
     body.append(form);
@@ -61,12 +73,20 @@ export function askText(title: string, value: string, confirm = 'Übernehmen', h
     const ok = h('button', { class: 'dlg-btn primary', text: confirm });
     actions.append(cancel, ok);
     const submit = () => {
-      const v = input.value.trim();
+      const v = multiline ? input.value.replace(/\s+$/, '') : input.value.trim();
       finish(dlg, resolve, v || allowEmpty ? v : null);
     };
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       submit();
+    });
+    // ⌘/Ctrl+Return confirms a text area.
+    input.addEventListener('keydown', (e) => {
+      const ke = e as KeyboardEvent;
+      if (multiline && ke.key === 'Enter' && (ke.metaKey || ke.ctrlKey)) {
+        ke.preventDefault();
+        submit();
+      }
     });
     ok.addEventListener('click', submit);
     cancel.addEventListener('click', () => finish(dlg, resolve, null));

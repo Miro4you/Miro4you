@@ -1,6 +1,6 @@
 import { layoutAnno, textWidth, type AnnoLayout, type AnnoText } from '../core/annotations';
 import { currentTheme, PAPER_COLORS } from '../core/pens';
-import type { DatumEntity, DimEntity, GtolEntity, HatchEntity } from '../core/types';
+import type { HatchEntity, LaidOut } from '../core/types';
 
 /** Subset of the canvas API used for annotations (also implemented by the export recorder). */
 export type DrawCtx = Pick<
@@ -76,7 +76,7 @@ function drawText(ctx: DrawCtx, t: AnnoText, knockout: string | null): void {
 }
 
 /** Dimensions, datum symbols and tolerance frames. */
-export function drawAnno(ctx: DrawCtx, e: DimEntity | DatumEntity | GtolEntity, color: string, width: number, alpha: number): void {
+export function drawAnno(ctx: DrawCtx, e: LaidOut, color: string, width: number, alpha: number): void {
   drawLayout(ctx, layoutAnno(e), color, width, alpha, e.kind === 'dim' ? (knockoutOverride !== undefined ? knockoutOverride : PAPER_COLORS[currentTheme()]) : null);
 }
 

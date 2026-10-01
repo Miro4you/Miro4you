@@ -451,6 +451,15 @@ export class InputController {
       case 'h':
         app.setTool('hatch');
         break;
+      case 'q':
+        app.setTool('rect');
+        break;
+      case 'u':
+        app.setTool('fillet');
+        break;
+      case 'w':
+        app.setTool('text');
+        break;
       case 'd':
         app.setTool('dim');
         break;

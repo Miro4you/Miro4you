@@ -61,7 +61,7 @@ export class ColorPopover {
     for (const b of this.buttons) b.classList.toggle('active', b.dataset.color === c);
     const std = this.el.querySelector('.std-btn') as HTMLElement;
     std.classList.toggle('active', c === null);
-    std.style.setProperty('--std', standardColor(this.app.style.pen));
+    std.style.setProperty('--std', standardColor(this.app.style.pen, this.app.style.hardness));
     if (c) this.custom.value = c;
   }
 

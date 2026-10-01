@@ -1,5 +1,5 @@
 import { dist, type Vec } from './geom';
-import type { Annotation, DatumEntity, DimEntity, GpsSymbol, GtolEntity } from './types';
+import type { Annotation, DatumEntity, DimEntity, GpsSymbol, GtolEntity, LaidOut, SheetEntity, SheetFormat, TextEntity } from './types';
 
 /**
  * Layout of annotations as plain geometry (world mm): thin lines and arcs, filled
@@ -47,11 +47,27 @@ const unit = (v: Vec): Vec => {
 };
 const perp = (v: Vec): Vec => ({ x: -v.y, y: v.x });
 
-/** Rough text width for layout (proportional sans). */
+/** Helvetica/Arial advance widths (1/1000 em) – the lettering font on screen and in PDFs. */
+
+const HELV: Record<string, number> = {};
+{
+  const ascii =
+    ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+  const w = [
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278,
+    584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
+    667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
+    278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+  ];
+  [...ascii].forEach((c, i) => (HELV[c] = w[i]));
+  Object.assign(HELV, { 'Ø': 778, 'ø': 611, '°': 400, '±': 584, 'µ': 556, 'Ä': 667, 'Ö': 778, 'Ü': 722, 'ä': 556, 'ö': 556, 'ü': 556, 'ß': 611, '×': 584, '²': 333, '³': 333 });
+}
+
+/** Width of a text at letter height `size` (Helvetica metrics). */
 export function textWidth(text: string, size = TEXT_H): number {
   let w = 0;
-  for (const ch of text) w += (/[.,:;'|il1]/.test(ch) ? 0.32 : /[°]/.test(ch) ? 0.4 : /[MWØ]/.test(ch) ? 0.8 : 0.6) * size;
-  return w;
+  for (const c of text) w += HELV[c] ?? 556;
+  return (w / 1000) * size;
 }
 
 /** "42,5" / "25" – one decimal, trailing zero dropped. */
@@ -399,14 +415,148 @@ function arrowSmall(tip: Vec, dir: Vec): Vec[] {
 
 const layoutCache = new WeakMap<Annotation, AnnoLayout>();
 
-/** Layout of a dimension or GPS symbol (hatches have none). */
-export function layoutAnno(e: DimEntity | DatumEntity | GtolEntity): AnnoLayout {
+/** Layout of a dimension, GPS symbol, text or sheet (hatches have none). */
+export function layoutAnno(e: LaidOut): AnnoLayout {
   let l = layoutCache.get(e);
   if (!l) {
-    l = e.kind === 'dim' ? layoutDim(e) : e.kind === 'datum' ? layoutDatum(e) : layoutGtol(e);
+    switch (e.kind) {
+      case 'dim':
+        l = layoutDim(e);
+        break;
+      case 'datum':
+        l = layoutDatum(e);
+        break;
+      case 'gtol':
+        l = layoutGtol(e);
+        break;
+      case 'text':
+        l = layoutText(e);
+        break;
+      case 'sheet':
+        l = layoutSheet(e);
+        break;
+    }
     layoutCache.set(e, l);
   }
   return l;
+}
+
+// ---- text ------------------------------------------------------------------------------------
+
+/** Line spacing as a multiple of the letter height (ISO 3098: about 1.43 … 1.6). */
+export const LINE_SPACING = 1.6;
+
+function layoutText(e: TextEntity): AnnoLayout {
+  const L: AnnoLayout = { lines: [], arcs: [], fills: [], texts: [] };
+  const r = { x: Math.cos(e.angle), y: Math.sin(e.angle) };
+  const below = { x: -r.y, y: r.x };
+  e.text.split('\n').forEach((line, i) => {
+    if (!line) return;
+    const w = textWidth(line, e.size);
+    const start = add(e.at, below, i * e.size * LINE_SPACING);
+    L.texts.push({ p: add(start, r, w / 2), angle: e.angle, text: line, size: e.size, baseline: 'bottom' });
+  });
+  return L;
+}
+
+// ---- sheets ----------------------------------------------------------------------------------
+
+const PAPER: Record<SheetFormat, [number, number]> = {
+  A4: [210, 297],
+  A3: [297, 420],
+  A2: [420, 594],
+  A1: [594, 841],
+  A0: [841, 1189],
+};
+
+export const SHEET_FORMATS = Object.keys(PAPER) as SheetFormat[];
+
+/** Paper size [width, height] in mm. */
+export function paperSize(format: SheetFormat, landscape: boolean): [number, number] {
+  const [a, b] = PAPER[format];
+  return landscape ? [b, a] : [a, b];
+}
+
+/** World box of a sheet. */
+export function sheetBox(e: SheetEntity): { minX: number; minY: number; maxX: number; maxY: number } {
+  const [w, h] = paperSize(e.format, e.landscape);
+  return { minX: e.at.x, minY: e.at.y, maxX: e.at.x + w * e.scale, maxY: e.at.y + h * e.scale };
+}
+
+/** "1:2", "1:1", "2:1". */
+export function scaleText(k: number): string {
+  const f = (v: number) => String(Math.round(v * 100) / 100).replace('.', ',');
+  return k >= 1 ? `1:${f(k)}` : `${f(1 / k)}:1`;
+}
+
+/** Wide frame line (ISO 5457: 0.7 mm) as a filled ring around the rectangle. */
+function thickRect(L: AnnoLayout, P: (x: number, y: number) => Vec, x0: number, y0: number, x1: number, y1: number, w: number): void {
+  const h = w / 2;
+  L.fills.push([P(x0 - h, y0 - h), P(x1 + h, y0 - h), P(x1 + h, y1 + h), P(x0 - h, y1 + h)]);
+  // Inner outline in the opposite direction makes a hole (nonzero fill).
+  L.fills.push([P(x0 + h, y0 + h), P(x0 + h, y1 - h), P(x1 - h, y1 - h), P(x1 - h, y0 + h)]);
+}
+
+function bar(L: AnnoLayout, P: (x: number, y: number) => Vec, x0: number, y0: number, x1: number, y1: number, w: number): void {
+  const h = w / 2;
+  if (x0 === x1) L.fills.push([P(x0 - h, y0), P(x0 + h, y0), P(x0 + h, y1), P(x0 - h, y1)]);
+  else L.fills.push([P(x0, y0 - h), P(x1, y0 - h), P(x1, y0 + h), P(x0, y0 + h)]);
+}
+
+/** Title block size (ISO 7200: 180 mm wide). */
+export const TITLE_W = 180;
+export const TITLE_H = 32;
+
+/** Title block cells: [x, y, w, h, label, field] in paper mm relative to the block's top-left. */
+export const TITLE_CELLS: [number, number, number, number, string, keyof SheetEntity['fields'] | 'scale' | 'format'][] = [
+  [0, 0, 110, 12, 'Benennung', 'title'],
+  [110, 0, 70, 12, 'Zeichnungsnummer', 'number'],
+  [0, 12, 90, 10, 'Werkstoff', 'material'],
+  [90, 12, 45, 10, 'Maßstab', 'scale'],
+  [135, 12, 45, 10, 'Format', 'format'],
+  [0, 22, 70, 10, 'Gezeichnet', 'drawnBy'],
+  [70, 22, 40, 10, 'Datum', 'date'],
+  [110, 22, 70, 10, 'Firma', 'company'],
+];
+
+function layoutSheet(e: SheetEntity): AnnoLayout {
+  const L: AnnoLayout = { lines: [], arcs: [], fills: [], texts: [] };
+  const k = e.scale;
+  const P = (x: number, y: number): Vec => ({ x: e.at.x + x * k, y: e.at.y + y * k });
+  const [W, H] = paperSize(e.format, e.landscape);
+  const thick = 0.7;
+  // Trimmed sheet edge (thin) and drawing frame: 20 mm filing margin left, 10 mm elsewhere.
+  L.lines.push([P(0, 0), P(W, 0)], [P(W, 0), P(W, H)], [P(W, H), P(0, H)], [P(0, H), P(0, 0)]);
+  const x0 = 20;
+  const y0 = 10;
+  const x1 = W - 10;
+  const y1 = H - 10;
+  thickRect(L, P, x0, y0, x1, y1, thick * k);
+  // Centring marks from the sheet edge to 5 mm into the frame.
+  bar(L, P, W / 2, 0, W / 2, y0 + 5, thick * k);
+  bar(L, P, W / 2, H, W / 2, y1 - 5, thick * k);
+  bar(L, P, 5, H / 2, x0 + 5, H / 2, thick * k);
+  bar(L, P, W, H / 2, x1 - 5, H / 2, thick * k);
+  // Title block in the bottom right corner of the frame.
+  const bx = x1 - TITLE_W;
+  const by = y1 - TITLE_H;
+  thickRect(L, P, bx, by, x1, y1, thick * k);
+  const values: Record<string, string> = { ...e.fields, scale: scaleText(k), format: e.format };
+  for (const [cx, cy, cw, ch, label, key] of TITLE_CELLS) {
+    // Inner cell borders (thin); the outer ones are the thick block border.
+    if (cx > 0) L.lines.push([P(bx + cx, by + cy), P(bx + cx, by + cy + ch)]);
+    if (cy > 0) L.lines.push([P(bx + cx, by + cy), P(bx + cx + cw, by + cy)]);
+    const ls = 1.8;
+    L.texts.push({ p: P(bx + cx + 1.2 + textWidth(label, ls) / 2, by + cy + 2.6), angle: 0, text: label, size: ls * k, baseline: 'bottom' });
+    const v = values[key] ?? '';
+    if (!v) continue;
+    let vs = key === 'title' ? 5 : 3.5;
+    // Shrink long entries to fit the cell.
+    const room = cw - 3;
+    if (textWidth(v, vs) > room) vs = Math.max(1.8, (vs * room) / textWidth(v, vs));
+    L.texts.push({ p: P(bx + cx + 1.5 + textWidth(v, vs) / 2, by + cy + ch - 2), angle: 0, text: v, size: vs * k, baseline: 'bottom' });
+  }
+  return L;
 }
 
 /** Corners of a text box (for bounds and hit tests). */

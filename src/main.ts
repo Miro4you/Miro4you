@@ -7,6 +7,9 @@ import { ask } from './ui/dialogs';
 import { Palette } from './ui/palette';
 import { SelectionBar } from './ui/selectionbar';
 import { showExportDialog } from './ui/export-dialog';
+import { editSheet } from './ui/sheet-dialog';
+import { showCloudDialog } from './ui/cloud-dialog';
+import { setCloudCurrent } from './storage/cloud';
 
 const root = document.getElementById('app')!;
 const sceneCanvas = h('canvas', { class: 'scene' });
@@ -53,6 +56,7 @@ fileInput.addEventListener('change', async () => {
       return;
     }
     app.loadDrawing(data);
+    setCloudCurrent(null);
     app.toast(`„${file.name}“ geöffnet`);
   } catch (err) {
     app.toast(`Öffnen fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
@@ -76,6 +80,7 @@ async function newDrawing(): Promise<void> {
     return;
   }
   app.newDrawing();
+  setCloudCurrent(null);
 }
 
 document.addEventListener('app:download', download);
@@ -88,7 +93,7 @@ const toast = new Toast();
 app.setToast((m) => toast.show(m));
 const help = helpDialog();
 const layers = new LayersPanel(app);
-const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, exportFile: () => showExportDialog(app), help: () => help.showModal() });
+const menu = new Menu(app, { newDrawing: () => void newDrawing(), open, download, exportFile: () => showExportDialog(app), sheet: () => void editSheet(app), cloud: () => void showCloudDialog(app), help: () => help.showModal() });
 const viewBar = new ViewBar(app, layers, menu);
 const palette = new Palette(app);
 const selectionBar = new SelectionBar(app);

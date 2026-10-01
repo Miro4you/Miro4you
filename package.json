@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "serve": "node server/server.mjs",
+    "start": "npm run build && node server/server.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

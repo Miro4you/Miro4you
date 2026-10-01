@@ -4,7 +4,7 @@ Technische Skizzen im Browser – schnell wie auf Papier, sauber wie CAD.
 Primär für das iPad mit Apple Pencil gebaut, funktioniert auch mit Maus und Tastatur.
 Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 
-## Stand: Phase 1 – 3
+## Stand: Phase 1 – 4
 
 - Unendlicher Canvas in Millimetern: Verschieben, Zoomen, Drehen (rastet bei 0°/45°/90° ein)
 - Bleistift 0,3 · 0,5 · 0,7 · 0,9 mm und Tusche 0,18 · 0,25 · 0,35 · 0,5 · 0,7 mm
@@ -44,6 +44,15 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - ISO-GPS: Bezugsdreieck mit Buchstabenrahmen (A, B, … automatisch fortlaufend) und Toleranzrahmen mit allen 14 Symbolen nach ISO 1101, Toleranzwert, Ø und bis zu drei Bezügen
 - Export (Menü → Exportieren, ⇧⌘E): PDF und SVG als Vektor im Maßstab 1:1, PNG und JPEG mit Bleistift-Struktur in 150/300/600 dpi, alles oder nur die Auswahl, PNG/SVG auch transparent
 
+**Phase 4**
+
+- Rechteck von Ecke zu Ecke (aus vier echten Linien, also trimm- und verrundbar)
+- Ecken verrunden: an eine Ecke zweier Linien tippen (Radius 1/2/3/5/10 mm oder „Ecke“ = scharf schließen/verlängern) oder an der Ecke drücken und ziehen – der Radius folgt dem Stift; bei sich kreuzenden Linien gilt der angetippte Quadrant
+- Text: Startpunkt antippen (oder ziehen für die Schreibrichtung), mehrzeilig, Schrifthöhe 2,5–10 mm; vorhandenen Text antippen zum Ändern
+- Blatt & Schriftfeld (Menü): A4–A0, hoch/quer, Maßstab 2:1 bis 1:10, Rahmen nach ISO 5457 mit Mittenmarken, Schriftfeld (Benennung, Zeichnungsnummer, Werkstoff, Maßstab, Format, Gezeichnet, Datum, Firma) auf eigener Ebene „Blatt“; Export „Blatt“ gibt genau das Papierformat im Maßstab aus
+- Graphit-Härten 2H / HB / 2B (hell bis dunkel) im Stift-Menü
+- Online-Ablage auf dem eigenen Server (z. B. Raspberry Pi): Zeichnungen mit Vorschaubild speichern, öffnen, überschreiben, löschen; optional mit Passwort
+
 ## Bedienung
 
 | Eingabe | Aktion |
@@ -59,6 +68,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 | K | Achsenkreuz |
 | X · T · E | Objekt löschen · Trimmen · Radierer |
 | H · D · P | Schraffur · Bemaßung · GPS-Symbol |
+| Q · U · W | Rechteck · Ecken verrunden · Text |
 | Entf · ⌘D · ⌘A · Pfeile | Auswahl löschen · duplizieren · alles wählen · verschieben |
 | 1–4 / 5–9 | Bleistift- / Tuschestärken |
 | ⇧1–⇧5 | Linienart |
@@ -77,10 +87,49 @@ npm run build      # Typecheck + Produktions-Build nach dist/
 npm run preview    # Build lokal ansehen
 ```
 
+### Auf dem Raspberry Pi betreiben (mit Online-Ablage)
+
+```bash
+git pull
+npm install
+npm start          # baut die App und startet den Server auf Port 8080
+```
+
+Dann auf dem iPad `http://<IP-des-Pi>:8080` öffnen und zum Home-Bildschirm hinzufügen. Der Server (`server/server.mjs`, nur Node.js, keine weiteren Pakete) liefert die App aus und legt Zeichnungen als JSON-Dateien in `data/` ab. Einstellungen über Umgebungsvariablen:
+
+| Variable | Bedeutung |
+| --- | --- |
+| `PORT` | Port (Standard 8080) |
+| `DATA_DIR` | Ablageordner (Standard `./data`) |
+| `TOKEN` | Optionales Passwort für die Ablage – in der App unter Online-Ablage → Verbindung eintragen |
+
+Dauerhaft laufen lassen, z. B. mit systemd (`/etc/systemd/system/skizzen-cad.service`):
+
+```ini
+[Unit]
+Description=Skizzen-CAD
+After=network.target
+
+[Service]
+WorkingDirectory=/home/pi/Miro4you
+ExecStart=/usr/bin/node server/server.mjs
+Environment=PORT=8080
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`sudo systemctl enable --now skizzen-cad` – nach Updates `npm run build` und `sudo systemctl restart skizzen-cad`.
+
 Technik: TypeScript, Vite, Canvas 2D, keine UI-Frameworks. Aufbau:
 
 - `src/core` – Geometrie (Kurven, Schnittpunkte, Trimmen), Transformationen, Dokument mit Undo/Redo, Kamera, Fang, Stifte/Linienarten
 - `src/render` – Szene (Papier, Raster, Objekte), Graphit-Textur, Overlay (Vorschau, Maße, Fangmarken)
-- `src/tools` – Werkzeuge (Auswahl, Freihand, Linie, Kreis, Bogen, Löschen, Trimmen, Radierer) und gemeinsame Griffe
+- `src/tools` – Werkzeuge (Auswahl, Freihand, Linie, Rechteck, Kreis, Bogen, Achsenkreuz, Löschen, Trimmen, Radierer, Verrunden, Schraffur, Bemaßung, GPS, Text) und gemeinsame Griffe
+- `src/export` – Vektor-Recorder, SVG- und PDF-Writer, Raster-Export
+- `src/storage` – lokales Speichern und Online-Ablage
+- `server/` – kleiner Node-Server für Pi/Heimnetz
 - `src/input` – Pencil/Maus/Touch-Steuerung, Gesten, Tastatur
 - `src/ui` – Werkzeugleiste, Ebenen, Menü

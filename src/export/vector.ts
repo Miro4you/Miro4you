@@ -1,3 +1,4 @@
+import { textWidth } from '../core/annotations';
 /**
  * A recording stand-in for the canvas 2D context (the subset the annotation and
  * path code uses). Drawing is collected as paths and texts in world mm and can
@@ -325,27 +326,9 @@ export class VectorRecorder {
   }
 }
 
-// ---- Helvetica metrics (for PDF text centring) ------------------------------------------------
-
-const HELV: Record<string, number> = {};
-{
-  const ascii =
-    ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-  const w = [
-    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278,
-    584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
-    667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
-    278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
-  ];
-  [...ascii].forEach((c, i) => (HELV[c] = w[i]));
-  Object.assign(HELV, { 'Ø': 778, 'ø': 611, '°': 400, '±': 584, 'µ': 556, 'Ä': 667, 'Ö': 778, 'Ü': 722, 'ä': 556, 'ö': 556, 'ü': 556, 'ß': 611, '×': 584, '²': 333, '³': 333 });
-}
-
 /** Width of a text in Helvetica at font size `size` (same unit as size). */
 export function textWidthMm(text: string, size: number): number {
-  let w = 0;
-  for (const c of text) w += HELV[c] ?? 556;
-  return (w / 1000) * size;
+  return textWidth(text, size);
 }
 
 // ---- colours -------------------------------------------------------------------------------
@@ -383,6 +366,8 @@ export interface Page {
   height: number;
   /** Background colour or null for transparent. */
   background: string | null;
+  /** World mm per paper mm (sheet drawn at 1:2 → 2). Default 1. */
+  scale?: number;
 }
 
 const f = (v: number) => {
@@ -411,7 +396,7 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 export function toSvg(rec: VectorRecorder, page: Page, title = 'Skizze'): string {
   const out: string[] = [];
   out.push(
-    `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${f(page.width)}mm" height="${f(page.height)}mm" viewBox="${f(page.minX)} ${f(page.minY)} ${f(page.width)} ${f(page.height)}">`,
+    `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${f(page.width / (page.scale ?? 1))}mm" height="${f(page.height / (page.scale ?? 1))}mm" viewBox="${f(page.minX)} ${f(page.minY)} ${f(page.width)} ${f(page.height)}">`,
     `<title>${esc(title)}</title>`,
   );
   if (rec.clips.length) {
@@ -493,8 +478,9 @@ const JOIN = { miter: 0, round: 1, bevel: 2 } as const;
 /** A single-page PDF at 1:1 (world mm = paper mm). Returns the file bytes. */
 export function toPdf(rec: VectorRecorder, page: Page, title = 'Skizze'): Uint8Array {
   const c: string[] = [];
+  const k = PT / (page.scale ?? 1);
   // Page space: origin bottom left, pt. World: mm, y down.
-  c.push(`${pdfNum(PT)} 0 0 ${pdfNum(-PT)} ${pdfNum(-page.minX * PT)} ${pdfNum((page.minY + page.height) * PT)} cm`);
+  c.push(`${pdfNum(k)} 0 0 ${pdfNum(-k)} ${pdfNum(-page.minX * k)} ${pdfNum((page.minY + page.height) * k)} cm`);
   if (page.background) {
     const [r, g, b] = parseColor(page.background);
     c.push(`${pdfNum(r)} ${pdfNum(g)} ${pdfNum(b)} rg`, `${pdfNum(page.minX)} ${pdfNum(page.minY)} ${pdfNum(page.width)} ${pdfNum(page.height)} re f`);
@@ -542,8 +528,8 @@ export function toPdf(rec: VectorRecorder, page: Page, title = 'Skizze'): Uint8A
     c.push('Q');
   }
   const content = c.join('\n');
-  const W = page.width * PT;
-  const H = page.height * PT;
+  const W = page.width * k;
+  const H = page.height * k;
   const objs = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',

@@ -16,6 +16,9 @@ import { CrossTool } from './tools/cross';
 import { DeleteTool } from './tools/delete';
 import { EraserTool } from './tools/eraser';
 import { DimTool } from './tools/dim';
+import { FilletTool } from './tools/fillet';
+import { RectTool } from './tools/rect';
+import { TextTool } from './tools/text';
 import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
 import { HatchTool } from './tools/hatch';
@@ -24,7 +27,22 @@ import { SelectTool } from './tools/select';
 import type { PointerKind, Tool } from './tools/tool';
 import { TrimTool } from './tools/trim';
 
-export type ToolId = 'select' | 'freehand' | 'line' | 'circle' | 'arc' | 'cross' | 'delete' | 'trim' | 'erase' | 'hatch' | 'dim' | 'gps';
+export type ToolId =
+  | 'select'
+  | 'freehand'
+  | 'line'
+  | 'rect'
+  | 'circle'
+  | 'arc'
+  | 'cross'
+  | 'delete'
+  | 'trim'
+  | 'erase'
+  | 'fillet'
+  | 'hatch'
+  | 'dim'
+  | 'gps'
+  | 'text';
 
 export interface Settings {
   grid: boolean;
@@ -53,6 +71,10 @@ export interface Settings {
   hatchGap: number;
   /** GPS tool: place datum symbols or tolerance frames. */
   gpsMode: 'datum' | 'gtol';
+  /** Fillet radius in mm (0 = sharp corner). */
+  filletRadius: number;
+  /** Letter height of new texts in mm. */
+  textSize: number;
 }
 
 /** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
@@ -81,6 +103,8 @@ const DEFAULT_SETTINGS: Settings = {
   hatchSpacing: 2,
   hatchGap: 1.5,
   gpsMode: 'datum',
+  filletRadius: 3,
+  textSize: 3.5,
 };
 
 /**
@@ -89,7 +113,7 @@ const DEFAULT_SETTINGS: Settings = {
  */
 function mirrorable(e: Entity): boolean {
   if (e.kind === 'line' && e.axis) return false;
-  return e.kind !== 'dim' && e.kind !== 'datum' && e.kind !== 'gtol';
+  return e.kind !== 'dim' && e.kind !== 'datum' && e.kind !== 'gtol' && e.kind !== 'text' && e.kind !== 'sheet';
 }
 
 interface Widget {
@@ -157,6 +181,9 @@ export class App {
       hatch: new HatchTool(this),
       dim: new DimTool(this),
       gps: new GpsTool(this),
+      rect: new RectTool(this),
+      fillet: new FilletTool(this),
+      text: new TextTool(this),
     };
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
     this.toolId = savedTool in this.tools ? savedTool : 'line';
@@ -653,6 +680,12 @@ export class App {
   }
 
   /** Zoom to show the whole drawing (or reset when empty). */
+  /** Show a world box (with a margin). */
+  fitBox(bx: import('./core/geom').Box): void {
+    this.cam.fit(bx, this.width, this.height, Math.min(60, Math.min(this.width, this.height) / 8));
+    this.viewChanged();
+  }
+
   fitAll(): void {
     let bx = emptyBox();
     for (const e of this.doc.visibleEntities()) bx = boxUnion(bx, entityBox(e));

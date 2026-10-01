@@ -11,6 +11,7 @@ import {
 import { dimText } from '../core/annotations';
 import type { Entity } from '../core/types';
 import { askGtol, askText } from './dialogs';
+import { editSheet } from './sheet-dialog';
 import { h } from './dom';
 import { icons } from './icons';
 
@@ -67,6 +68,13 @@ export class SelectionBar {
       const v = await askText('Bezugsbuchstabe', e.letter);
       if (!v) return;
       next = { ...e, letter: v.toUpperCase().slice(0, 3) };
+    } else if (e.kind === 'text') {
+      const v = await askText('Text bearbeiten', e.text, 'Übernehmen', undefined, false, true);
+      if (!v) return;
+      next = { ...e, text: v };
+    } else if (e.kind === 'sheet') {
+      await editSheet(this.app);
+      return;
     } else if (e.kind === 'gtol') {
       const spec = await askGtol({ sym: e.sym, value: e.value, dia: e.dia, datums: e.datums }, 'Übernehmen');
       if (!spec) return;
@@ -104,7 +112,7 @@ export class SelectionBar {
     const single = sel.length === 1 ? sel[0] : null;
     this.axisBtn.hidden = !(single && single.kind === 'line');
     this.axisBtn.classList.toggle('active', !!(single && single.kind === 'line' && single.axis));
-    this.editBtn.hidden = !(single && (single.kind === 'dim' || single.kind === 'datum' || single.kind === 'gtol'));
+    this.editBtn.hidden = !(single && ['dim', 'datum', 'gtol', 'text', 'sheet'].includes(single.kind));
     const round = sel.filter((e) => e.kind === 'circle' || e.kind === 'arc');
     this.marksBtn.hidden = round.length === 0;
     this.marksBtn.classList.toggle('active', round.length > 0 && round.every((e) => (e.kind === 'circle' || e.kind === 'arc') && e.mark));

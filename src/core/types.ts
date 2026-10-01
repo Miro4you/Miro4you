@@ -12,7 +12,11 @@ export interface Style {
   lineType: LineType;
   /** Custom colour, or null for the pen's standard colour (graphite / black). */
   color: string | null;
+  /** Pencil lead: light (2H), medium (HB, default) or dark (2B). */
+  hardness?: Hardness;
 }
+
+export type Hardness = '2H' | 'HB' | '2B';
 
 interface EntityBase {
   id: string;
@@ -130,13 +134,63 @@ export interface GtolEntity extends EntityBase {
   datums: string[];
 }
 
-export type Entity = LineEntity | StrokeEntity | CircleEntity | ArcEntity | HatchEntity | DimEntity | DatumEntity | GtolEntity;
+/** Free text (ISO 3098 style lettering); `at` is the start of the first baseline. */
+export interface TextEntity extends EntityBase {
+  kind: 'text';
+  at: Vec;
+  /** Lines separated by \n. */
+  text: string;
+  /** Letter height in mm. */
+  size: number;
+  /** Direction of writing (radians, world). */
+  angle: number;
+}
+
+export type SheetFormat = 'A4' | 'A3' | 'A2' | 'A1' | 'A0';
+
+export interface TitleFields {
+  title: string;
+  number: string;
+  material: string;
+  drawnBy: string;
+  date: string;
+  company: string;
+}
+
+/**
+ * Drawing sheet (ISO 5457 frame, ISO 7200 style title block). `at` is the top-left
+ * corner of the trimmed sheet in world mm; the sheet is `scale` times the paper
+ * size in the world (scale 2 = drawn at 1:2, 0.5 = 2:1).
+ */
+export interface SheetEntity extends EntityBase {
+  kind: 'sheet';
+  at: Vec;
+  format: SheetFormat;
+  landscape: boolean;
+  scale: number;
+  fields: TitleFields;
+}
+
+export type Entity =
+  | LineEntity
+  | StrokeEntity
+  | CircleEntity
+  | ArcEntity
+  | HatchEntity
+  | DimEntity
+  | DatumEntity
+  | GtolEntity
+  | TextEntity
+  | SheetEntity;
 
 /** Annotations don't take part in trimming, erasing or geometric snapping. */
-export type Annotation = HatchEntity | DimEntity | DatumEntity | GtolEntity;
+export type Annotation = HatchEntity | DimEntity | DatumEntity | GtolEntity | TextEntity | SheetEntity;
+
+/** Annotations drawn from a layout of lines, fills and texts (all but hatches). */
+export type LaidOut = Exclude<Annotation, HatchEntity>;
 
 export function isAnnotation(e: Entity): e is Annotation {
-  return e.kind === 'hatch' || e.kind === 'dim' || e.kind === 'datum' || e.kind === 'gtol';
+  return e.kind === 'hatch' || e.kind === 'dim' || e.kind === 'datum' || e.kind === 'gtol' || e.kind === 'text' || e.kind === 'sheet';
 }
 
 export interface Layer {

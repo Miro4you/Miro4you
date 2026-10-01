@@ -1,4 +1,4 @@
-import type { LineType, PenKind, Style } from './types';
+import type { Hardness, LineType, PenKind, Style } from './types';
 
 export const PENCIL_WIDTHS = [0.3, 0.5, 0.7, 0.9] as const;
 export const INK_WIDTHS = [0.18, 0.25, 0.35, 0.5, 0.7] as const;
@@ -24,8 +24,16 @@ export function currentTheme(): Theme {
   return theme;
 }
 
-export function standardColor(pen: PenKind): string {
-  return THEME_PENS[theme][pen];
+/** Graphite shades per lead hardness (HB is the pencil's standard colour). */
+const LEADS: Record<Theme, Record<Hardness, string>> = {
+  light: { '2H': '#787c85', HB: '#42454c', '2B': '#23252a' },
+  dark: { '2H': '#878b94', HB: '#b4b8c1', '2B': '#dcdfe5' },
+};
+
+export const HARDNESSES: Hardness[] = ['2H', 'HB', '2B'];
+
+export function standardColor(pen: PenKind, hardness: Hardness = 'HB'): string {
+  return pen === 'pencil' ? LEADS[theme][hardness] : THEME_PENS[theme][pen];
 }
 
 export const PEN_NAMES: Record<PenKind, string> = {
@@ -73,7 +81,7 @@ export function dashArray(lineType: LineType, d: number): number[] {
 }
 
 export function penColor(style: Style): string {
-  return style.color ?? standardColor(style.pen);
+  return style.color ?? standardColor(style.pen, style.hardness);
 }
 
 export function formatWidth(w: number): string {

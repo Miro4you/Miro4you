@@ -223,7 +223,7 @@ export class Menu {
 
   constructor(
     private app: App,
-    actions: { newDrawing: () => void; open: () => void; download: () => void; exportFile: () => void; help: () => void },
+    actions: { newDrawing: () => void; open: () => void; download: () => void; exportFile: () => void; sheet: () => void; cloud: () => void; help: () => void },
   ) {
     const item = (label: string, fn: () => void, hint = '') => {
       const b = h('button', { class: 'menu-item', role: 'menuitem' }, [h('span', { text: label }), h('kbd', { text: hint })]);
@@ -256,6 +256,8 @@ export class Menu {
       item('Datei öffnen …', actions.open, '⌘O'),
       item('Datei herunterladen', actions.download, '⌘S'),
       item('Exportieren (PDF, SVG, PNG, JPEG) …', actions.exportFile, '⇧⌘E'),
+      item('Online-Ablage …', actions.cloud),
+      item('Blatt & Schriftfeld …', actions.sheet),
       h('div', { class: 'menu-sep' }),
       h('div', { class: 'menu-label', text: 'Darstellung' }),
       themeRow,
@@ -313,6 +315,7 @@ export function helpDialog(): HTMLDialogElement {
     ['Werkzeuggruppe: nochmal tippen, lange drücken oder mit dem Pencil darüber schweben', 'Auswahl der Gruppe öffnen'],
     ['Strich-Punkt-Linie', 'Wird automatisch Symmetrieachse (Knopf am Ende schaltet Spiegeln)'],
     ['X · T · E', 'Objekt löschen · Trimmen · Radierer'],
+    ['Q · U · W', 'Rechteck · Ecken verrunden (antippen oder Radius ziehen) · Text'],
     ['H', 'Schraffur: in eine geschlossene Fläche tippen (kleine Lücken werden überbrückt)'],
     ['D', 'Bemaßung: Punkt zu Punkt ziehen, dann Maßlinie platzieren · Linie/Kreis/Bogen antippen · zwei Linien = Winkel'],
     ['P', 'GPS: Bezug oder Toleranzrahmen – auf Element drücken und wegziehen'],

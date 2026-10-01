@@ -138,4 +138,4 @@ A4 bis A0 (inkl. A3, A2, A1) als Rahmen mit Schriftfeld auf dem Canvas platzierb
 1. ✅ **Fundament:** Canvas (Pan/Zoom/Drehen), Stifte, Linienarten, Freihand, Linie mit Live-Maß, Endpunkt- und Winkelfang, Layer, Undo/Redo, lokales Speichern, schwebende Werkzeugleiste.
 2. ✅ **Konstruktion:** Kreis, Bogen, Symmetrie/Spiegeln, drei Löschwerkzeuge, Auswahl/Lasso, Farben.
 3. ✅ **Technische Zeichnung:** Schraffur mit Lückentoleranz, Bemaßung, ISO-GPS-Symbole, Export (SVG/PNG/PDF/JPEG), Datei herunterladen/öffnen.
-4. **Extras:** Blattformate mit Schriftfeld, Rechteck, Text, Ecken verrunden, Graphit-Härten, Online-Speicher.
+4. ✅ **Extras:** Blattformate mit Schriftfeld, Rechteck, Text, Ecken verrunden, Graphit-Härten, Online-Speicher.

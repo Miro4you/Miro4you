@@ -1222,3 +1222,154 @@ p.exp-hint {
 .fly-section[hidden] {
   display: none;
 }
+
+.hard-seg {
+  flex: 1;
+}
+
+.hard-seg .seg-btn {
+  height: 28px;
+}
+
+textarea.dlg-area {
+  height: auto;
+  min-height: 84px;
+  padding: 10px 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+dialog.sheet-dlg {
+  width: min(460px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin-top: max(12px, env(safe-area-inset-top));
+  overflow: auto;
+}
+
+.sheet-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sheet-row .grow {
+  flex: 1;
+}
+
+.sheet-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 10px;
+}
+
+.sheet-fields .wide {
+  grid-column: 1 / -1;
+}
+
+.sheet-fields .exp-field {
+  margin-top: 8px;
+}
+
+.dlg-actions .grow {
+  flex: 1;
+}
+
+.dlg-btn.danger-text {
+  background: transparent;
+  color: var(--danger);
+  padding: 0 6px;
+}
+
+dialog.cloud-dlg {
+  width: min(480px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin-top: max(12px, env(safe-area-inset-top));
+  overflow: auto;
+}
+
+.cloud-status {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.cloud-status.bad {
+  color: var(--danger);
+}
+
+.cloud-save {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.cloud-save .grow {
+  flex: 1;
+}
+
+.cloud-save .dlg-btn {
+  height: 40px;
+}
+
+.cloud-head {
+  margin-top: 14px;
+}
+
+.cloud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 42dvh;
+  margin-top: 6px;
+  overflow: auto;
+}
+
+.cloud-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.cloud-thumb {
+  flex: none;
+  width: 64px;
+  height: 46px;
+  border-radius: 6px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.cloud-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.cloud-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-date {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cloud-conn {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+.cloud-conn summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cloud-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}

@@ -2,6 +2,8 @@ import type { App } from '../app';
 import { EXT, exportDrawing, exportSize, type ExportFormat } from '../export/export';
 import { loadPref, savePref } from '../storage/idb';
 import { baseDialog } from './dialogs';
+import { findSheet } from './sheet-dialog';
+import { scaleText } from '../core/annotations';
 import { h } from './dom';
 
 interface ExportPrefs {
@@ -9,6 +11,7 @@ interface ExportPrefs {
   dpi: number;
   transparent: boolean;
   selection: boolean;
+  area?: 'all' | 'sel' | 'sheet';
 }
 
 const FORMATS: { id: ExportFormat; label: string; hint: string }[] = [
@@ -57,16 +60,26 @@ export function showExportDialog(app: App): void {
 
   const fmt = seg(FORMATS, () => prefs.format, (v) => (prefs.format = v));
   const hint = h('p', { class: 'exp-hint' });
-  const area = seg(
-    [
-      { id: 'all', label: 'Alles' },
-      { id: 'sel', label: selection.size ? `Auswahl (${selection.size})` : 'Auswahl' },
-    ],
-    () => (prefs.selection && selection.size ? 'sel' : 'all'),
-    (v) => (prefs.selection = v === 'sel'),
-  );
+  const sheet = findSheet(app);
+  const areaItems: { id: 'all' | 'sel' | 'sheet'; label: string }[] = [{ id: 'all', label: 'Alles' }];
+  if (sheet) areaItems.unshift({ id: 'sheet', label: `Blatt ${sheet.format}` });
+  areaItems.push({ id: 'sel', label: selection.size ? `Auswahl (${selection.size})` : 'Auswahl' });
+  const areaOf = (): 'all' | 'sel' | 'sheet' => {
+    const a = prefs.area ?? (prefs.selection ? 'sel' : sheet ? 'sheet' : 'all');
+    if (a === 'sel' && !selection.size) return sheet ? 'sheet' : 'all';
+    if (a === 'sheet' && !sheet) return 'all';
+    return a;
+  };
+  // A fresh selection is what one wants to export; otherwise the sheet if there is one.
+  if (selection.size) prefs.area = 'sel';
+  else if (sheet && prefs.area !== 'all') prefs.area = 'sheet';
+  const area = seg(areaItems, areaOf, (v) => (prefs.area = v));
   const areaBtn = area.row.lastElementChild as HTMLButtonElement;
   areaBtn.disabled = selection.size === 0;
+  const targetOpts = () => {
+    const a = areaOf();
+    return { only: a === 'sel' ? selection : undefined, sheet: a === 'sheet' ? (sheet ?? undefined) : undefined, margin: 10 };
+  };
   const dpi = seg(
     [
       { id: 150, label: '150 dpi' },
@@ -102,10 +115,11 @@ export function showExportDialog(app: App): void {
     hint.textContent = FORMATS.find((f) => f.id === prefs.format)!.hint;
     dpiField.hidden = !raster;
     bgField.hidden = prefs.format === 'jpeg' || prefs.format === 'pdf';
-    const sz = exportSize(app.doc, { only: prefs.selection && selection.size ? selection : undefined, margin: 10 });
+    const sz = exportSize(app.doc, targetOpts());
     if (!sz) size.textContent = 'Nichts zu exportieren.';
     else {
-      let text = `${mm(sz.w)} × ${mm(sz.h)} mm`;
+      const sh = targetOpts().sheet;
+      let text = `${mm(sz.w)} × ${mm(sz.h)} mm${sh ? ` · Maßstab ${scaleText(sh.scale)}` : ''}`;
       if (raster) {
         const k = prefs.dpi / 25.4;
         let pw = sz.w * k;
@@ -142,10 +156,9 @@ export function showExportDialog(app: App): void {
       const transparent = prefs.transparent && (prefs.format === 'png' || prefs.format === 'svg');
       const blob = await exportDrawing(app.doc, {
         format: prefs.format,
-        only: prefs.selection && selection.size ? selection : undefined,
+        ...targetOpts(),
         dpi: prefs.dpi,
         background: transparent ? null : '#ffffff',
-        margin: 10,
       });
       close();
       if (!blob) {

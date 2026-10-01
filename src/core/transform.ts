@@ -1,3 +1,4 @@
+import { sheetBox, textWidth } from './annotations';
 import type { Vec } from './geom';
 import type { Entity } from './types';
 
@@ -120,6 +121,23 @@ export function transformEntity<T extends Entity>(e: T, m: Affine, id: string = 
     case 'datum':
     case 'gtol':
       return { ...e, id, at: applyAffine(m, e.at), p: applyAffine(m, e.p) };
+    case 'text': {
+      let angle = mapAngle(m, e.angle);
+      let at = applyAffine(m, e.at);
+      if (det(m) < 0) {
+        // Mirrored text stays readable: start from the mirrored end of the first line.
+        const w = textWidth(e.text.split('\n')[0] ?? '', e.size);
+        at = { x: at.x + Math.cos(angle) * w, y: at.y + Math.sin(angle) * w };
+        angle += Math.PI;
+      }
+      return { ...e, id, at, angle: Math.atan2(Math.sin(angle), Math.cos(angle)) };
+    }
+    case 'sheet': {
+      // Sheets stay upright: only their centre moves.
+      const b = sheetBox(e);
+      const c = applyAffine(m, { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 });
+      return { ...e, id, at: { x: c.x - (b.maxX - b.minX) / 2, y: c.y - (b.maxY - b.minY) / 2 } };
+    }
   }
 }
 

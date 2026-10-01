@@ -1,6 +1,6 @@
 import type { App, ToolId } from '../app';
-import { formatWidth, INK_WIDTHS, LINE_TYPES, PEN_NAMES, PENCIL_WIDTHS } from '../core/pens';
-import type { HatchPattern, LineType, PenKind } from '../core/types';
+import { formatWidth, HARDNESSES, INK_WIDTHS, LINE_TYPES, PEN_NAMES, PENCIL_WIDTHS } from '../core/pens';
+import type { Hardness, HatchPattern, LineType, PenKind } from '../core/types';
 import { HATCH_NAMES } from '../render/annotations';
 import { loadPref, savePref } from '../storage/idb';
 import { icons, lineTypeIcon } from './icons';
@@ -32,14 +32,15 @@ const LINE_DASH: Record<LineType, string> = {
 };
 
 
-type ShapeId = 'line' | 'circle' | 'arc' | 'arc-center' | 'cross';
-type AnnoId = 'hatch' | 'dim' | 'datum' | 'gtol';
+type ShapeId = 'line' | 'rect' | 'circle' | 'arc' | 'arc-center' | 'cross';
+type AnnoId = 'hatch' | 'dim' | 'datum' | 'gtol' | 'text';
 
 const ANNOS: { id: AnnoId; title: string; icon: string }[] = [
   { id: 'hatch', title: 'Schraffur: in geschlossene Fläche tippen (H)', icon: icons.hatch },
   { id: 'dim', title: 'Bemaßung: von Punkt zu Punkt ziehen oder Element antippen (D)', icon: icons.dimension },
   { id: 'datum', title: 'Bezug (A, B, …): auf Kante drücken und wegziehen (P)', icon: icons.datum },
-  { id: 'gtol', title: 'Form- und Lagetoleranz: auf Element drücken und Rahmen wegziehen', icon: icons.gtol },
+  { id: 'gtol', title: 'Form- und Lagetoleranz: auf Element drücken und Rahmen wegziehen (P)', icon: icons.gtol },
+  { id: 'text', title: 'Text: Startpunkt antippen, vorhandenen Text antippen zum Ändern (W)', icon: icons.text },
 ];
 
 /** Tiny preview of a hatch pattern. */
@@ -54,10 +55,11 @@ function hatchIcon(p: HatchPattern): string {
   };
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1.5" stroke-width="1.1" opacity=".55"/>${lines[p]}</svg>`;
 }
-type EraseId = 'delete' | 'trim' | 'erase';
+type EraseId = 'delete' | 'trim' | 'erase' | 'fillet';
 
 const SHAPES: { id: ShapeId; tool: ToolId; title: string; icon: string }[] = [
   { id: 'line', tool: 'line', title: 'Linie (L)', icon: icons.line },
+  { id: 'rect', tool: 'rect', title: 'Rechteck: von Ecke zu Ecke (Q)', icon: icons.rect },
   { id: 'circle', tool: 'circle', title: 'Kreis: Mittelpunkt, dann Radius (C)', icon: icons.circle },
   { id: 'arc', tool: 'arc', title: 'Bogen: am Linienende tangential, sonst Mittelpunkt zuerst (B)', icon: icons.arc },
   { id: 'arc-center', tool: 'arc', title: 'Bogen um Mittelpunkt', icon: icons.arcCenter },
@@ -67,6 +69,7 @@ const ERASERS: { id: EraseId; title: string; icon: string }[] = [
   { id: 'delete', title: 'Objekt löschen: antippen oder drüberwischen (X)', icon: icons.deleteObj },
   { id: 'trim', title: 'Trimmen bis zum nächsten Schnittpunkt (T)', icon: icons.trim },
   { id: 'erase', title: 'Radierer (E)', icon: icons.eraser },
+  { id: 'fillet', title: 'Ecken verrunden: an die Ecke tippen, oder ziehen für den Radius (U)', icon: icons.fillet },
 ];
 
 /** Floating, draggable tool palette with pop-out groups. */
@@ -81,6 +84,11 @@ export class Palette {
   private annoItems = new Map<AnnoId, HTMLButtonElement>();
   /** Hatch options, shown only while the hatch tool is active. */
   private hatchOpts!: HTMLElement;
+  private textOpts!: HTMLElement;
+  private filletOpts!: HTMLElement;
+  private eraseFly!: Flyout;
+  private radiusItems = new Map<number, HTMLButtonElement>();
+  private textSizeItems = new Map<number, HTMLButtonElement>();
   private annoFly!: Flyout;
   private hatchItems = new Map<string, HTMLButtonElement>();
   private lastAnno: AnnoId = loadPref<{ id: AnnoId }>('lastAnno', { id: 'dim' }).id;
@@ -98,6 +106,7 @@ export class Palette {
   private shapeItems = new Map<ShapeId, HTMLButtonElement>();
   private eraseItems = new Map<EraseId, HTMLButtonElement>();
   private penItems: HTMLButtonElement[] = [];
+  private hardItems = new Map<Hardness, HTMLButtonElement>();
   private lineItems = new Map<LineType, HTMLButtonElement>();
   private angleItems = new Map<string, HTMLButtonElement>();
   private stabilizer: HTMLInputElement;
@@ -154,23 +163,35 @@ export class Palette {
     });
 
     // Erase group.
-    this.eraseBtn = btn('Löschen: Objekt, Trimmen, Radierer', icons.trim);
-    const eraseFly: Flyout = new Flyout(
-      ERASERS.map((s) => {
-        const b = item(s.title, s.icon, () => this.pickErase(s.id), () => eraseFly);
-        this.eraseItems.set(s.id, b);
-        return b;
-      }),
-      side,
-      'fly-row',
-    );
+    this.eraseBtn = btn('Ändern: Objekt löschen, Trimmen, Radierer, Verrunden', icons.trim);
+    const eraseRow = h('div', { class: 'fly-tools' });
+    const eraseFly: Flyout = new Flyout([eraseRow], side, 'fly-wide');
+    this.eraseFly = eraseFly;
+    for (const t of ERASERS) {
+      const b = item(t.title, t.icon, () => this.pickErase(t.id), () => eraseFly);
+      this.eraseItems.set(t.id, b);
+      eraseRow.append(b);
+    }
+    const radRow = h('div', { class: 'seg' });
+    for (const r of [0, 1, 2, 3, 5, 10]) {
+      const b = h('button', { class: 'seg-btn', text: r === 0 ? 'Ecke' : `R${r}`, title: r === 0 ? 'Scharfe Ecke (Linien kürzen/verlängern)' : `Radius ${r} mm`, 'data-item': '1' });
+      b.addEventListener('click', () => app.updateSettings({ filletRadius: r }));
+      this.radiusItems.set(r, b);
+      radRow.append(b);
+    }
+    this.filletOpts = h('div', { class: 'fly-section' }, [
+      h('div', { class: 'fly-title', text: 'Radius' }),
+      radRow,
+      h('div', { class: 'fly-hint', text: 'Oder an der Ecke drücken und ziehen – der Radius folgt dem Stift.' }),
+    ]);
+    eraseFly.el.append(this.filletOpts);
     eraseFly.attach(this.eraseBtn, () => {
       if (ERASERS.some((s) => s.id === app.toolId)) eraseFly.toggle(this.eraseBtn);
       else this.pickErase(this.lastErase);
     });
 
     // Annotation group: hatch, dimension, GPS symbols (+ hatch options).
-    this.annoBtn = btn('Schraffur, Bemaßung, GPS-Symbole', icons.dimension);
+    this.annoBtn = btn('Beschriften: Schraffur, Bemaßung, GPS-Symbole, Text', icons.dimension);
     const toolRow = h('div', { class: 'fly-tools' });
     const annoFly: Flyout = new Flyout([toolRow], side, 'fly-wide');
     this.annoFly = annoFly;
@@ -206,8 +227,16 @@ export class Palette {
       this.hatchItems.set(`g:${g}`, b);
       gapRow.append(b);
     }
+    const sizeRow = h('div', { class: 'seg' });
+    for (const sz of [2.5, 3.5, 5, 7, 10]) {
+      const b = h('button', { class: 'seg-btn', text: String(sz).replace('.', ','), title: `Schrifthöhe ${String(sz).replace('.', ',')} mm`, 'data-item': '1' });
+      b.addEventListener('click', () => app.updateSettings({ textSize: sz }));
+      this.textSizeItems.set(sz, b);
+      sizeRow.append(b);
+    }
+    this.textOpts = h('div', { class: 'fly-section' }, [h('div', { class: 'fly-title', text: 'Schrifthöhe (mm)' }), sizeRow]);
     this.hatchOpts = h('div', { class: 'fly-section' });
-    annoFly.el.append(this.hatchOpts);
+    annoFly.el.append(this.textOpts, this.hatchOpts);
     this.hatchOpts.append(
       h('div', { class: 'fly-title', text: 'Schraffur' }),
       patRow,
@@ -226,7 +255,16 @@ export class Palette {
     this.penBtn = h('button', { class: 'chip pen-trigger', title: 'Stift wählen (1–9)', 'aria-label': 'Stift' });
     const pencils = h('div', { class: 'pen-row' }, [h('span', { class: 'row-label', text: 'Bleistift' })]);
     const inks = h('div', { class: 'pen-row' }, [h('span', { class: 'row-label', text: 'Tusche' })]);
-    const penFly: Flyout = new Flyout([pencils, inks], side, 'fly-pens');
+    const hardRow = h('div', { class: 'pen-row' }, [h('span', { class: 'row-label', text: 'Härte' })]);
+    const hardSeg = h('div', { class: 'seg hard-seg' });
+    for (const hd of HARDNESSES) {
+      const b = h('button', { class: 'seg-btn', text: hd, title: `Mine ${hd}${hd === '2H' ? ' – hell' : hd === '2B' ? ' – dunkel' : ''}`, 'data-item': '1' });
+      b.addEventListener('click', () => app.setStyle({ hardness: hd, pen: 'pencil', ...(app.style.pen === 'pencil' ? {} : { width: 0.5 }) }));
+      this.hardItems.set(hd, b);
+      hardSeg.append(b);
+    }
+    hardRow.append(hardSeg);
+    const penFly: Flyout = new Flyout([pencils, hardRow, inks], side, 'fly-pens');
     ALL_PENS.forEach((p, i) => {
       const title = `${PEN_NAMES[p.pen]} ${formatWidth(p.width)} mm (${i + 1})`;
       const b = item(title, '', () => this.selectPen(i), () => penFly, `chip ${p.pen}`);
@@ -345,7 +383,7 @@ export class Palette {
   /** Active annotation tool, if any. */
   private activeAnno(): AnnoId | null {
     const t = this.app.toolId;
-    if (t === 'hatch' || t === 'dim') return t;
+    if (t === 'hatch' || t === 'dim' || t === 'text') return t;
     if (t === 'gps') return this.app.settings.gpsMode;
     return null;
   }
@@ -390,10 +428,17 @@ export class Palette {
     this.annoBtn.innerHTML = ANNOS.find((a) => a.id === (anno ?? this.lastAnno))!.icon;
     this.annoBtn.classList.toggle('active', anno !== null);
     for (const [id, b] of this.annoItems) b.classList.toggle('active', id === anno);
-    if (this.hatchOpts.hidden !== (anno !== 'hatch')) {
+    if (this.hatchOpts.hidden !== (anno !== 'hatch') || this.textOpts.hidden !== (anno !== 'text')) {
       this.hatchOpts.hidden = anno !== 'hatch';
+      this.textOpts.hidden = anno !== 'text';
       this.annoFly.reposition();
     }
+    for (const [sz, b] of this.textSizeItems) b.classList.toggle('active', sz === settings.textSize);
+    if (this.filletOpts.hidden !== (toolId !== 'fillet')) {
+      this.filletOpts.hidden = toolId !== 'fillet';
+      this.eraseFly.reposition();
+    }
+    for (const [r, b] of this.radiusItems) b.classList.toggle('active', r === settings.filletRadius);
     for (const [k, b] of this.hatchItems) {
       b.classList.toggle('active', k === `p:${settings.hatchPattern}` || k === `s:${settings.hatchSpacing}` || k === `g:${settings.hatchGap}`);
     }
@@ -401,6 +446,7 @@ export class Palette {
     this.penBtn.className = `chip pen-trigger ${style.pen}`;
     this.penBtn.replaceChildren(this.penDot(style.pen, style.width), h('span', { class: 'cap', text: formatWidth(style.width) }));
     ALL_PENS.forEach((p, i) => this.penItems[i].classList.toggle('active', p.pen === style.pen && p.width === style.width));
+    for (const [hd, b] of this.hardItems) b.classList.toggle('active', style.pen === 'pencil' && (style.hardness ?? 'HB') === hd);
     this.lineBtn.innerHTML = lineTypeIcon(LINE_DASH[style.lineType]);
     for (const [id, b] of this.lineItems) b.classList.toggle('active', id === style.lineType);
     const swatch = this.colorBtn.querySelector('.swatch') as HTMLElement;

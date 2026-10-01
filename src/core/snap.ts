@@ -149,7 +149,10 @@ export function keyPoints(e: Entity): Vec[] {
     case 'datum':
     case 'gtol':
       return [e.at, e.p];
+    case 'text':
+      return [e.at];
     case 'hatch':
+    case 'sheet':
       return [];
   }
 }

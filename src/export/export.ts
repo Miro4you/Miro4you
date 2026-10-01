@@ -3,7 +3,8 @@ import { entityBox } from '../core/document';
 import { boxExpand, boxUnion, emptyBox, isEmptyBox, type Box } from '../core/geom';
 import { currentTheme, dashArray, penColor, setPenTheme } from '../core/pens';
 import type { SketchDocument } from '../core/document';
-import { isAnnotation, type Entity } from '../core/types';
+import { isAnnotation, type Entity, type SheetEntity } from '../core/types';
+import { sheetBox } from '../core/annotations';
 import { drawAnno, drawHatch, setKnockout, type DrawCtx } from '../render/annotations';
 import { centerMarks, Painter } from '../render/painter';
 import { traceEntity } from '../render/paths';
@@ -21,6 +22,8 @@ export interface ExportOptions {
   background: string | null;
   /** Margin around the drawing in mm. */
   margin: number;
+  /** Export exactly this sheet (its paper size and scale). */
+  sheet?: SheetEntity;
 }
 
 /** Largest raster we create (iPad Safari refuses canvases above ~16.7 MP). */
@@ -31,6 +34,8 @@ const PENCIL_ALPHA = 0.9;
 interface Job {
   entities: { e: Entity; alpha: number }[];
   box: Box;
+  /** World mm per paper mm. */
+  scale: number;
 }
 
 function collect(doc: SketchDocument, opts: ExportOptions): Job {
@@ -44,7 +49,8 @@ function collect(doc: SketchDocument, opts: ExportOptions): Job {
       box = boxUnion(box, entityBox(e));
     }
   }
-  return { entities, box: isEmptyBox(box) ? box : boxExpand(box, opts.margin) };
+  if (opts.sheet) return { entities, box: sheetBox(opts.sheet), scale: opts.sheet.scale };
+  return { entities, box: isEmptyBox(box) ? box : boxExpand(box, opts.margin), scale: 1 };
 }
 
 /** Vector drawing of the entities (no pencil grain: clean lines in the pen colour). */
@@ -90,7 +96,7 @@ export function recordVector(entities: { e: Entity; alpha: number }[]): VectorRe
 function rasterize(job: Job, opts: ExportOptions): Promise<Blob> {
   const w = job.box.maxX - job.box.minX;
   const h = job.box.maxY - job.box.minY;
-  let pxPerMm = opts.dpi / 25.4;
+  let pxPerMm = opts.dpi / 25.4 / job.scale;
   const need = w * h * pxPerMm * pxPerMm;
   if (need > MAX_PIXELS) pxPerMm *= Math.sqrt(MAX_PIXELS / need);
   const canvas = document.createElement('canvas');
@@ -131,6 +137,7 @@ export async function exportDrawing(doc: SketchDocument, opts: ExportOptions, ti
       width: job.box.maxX - job.box.minX,
       height: job.box.maxY - job.box.minY,
       background: opts.format === 'pdf' ? (opts.background ?? null) : opts.background,
+      scale: job.scale,
     };
     if (opts.format === 'svg') return new Blob([toSvg(rec, page, title)], { type: 'image/svg+xml' });
     const bytes = toPdf(rec, page, title);
@@ -144,8 +151,9 @@ export async function exportDrawing(doc: SketchDocument, opts: ExportOptions, ti
 export const EXT: Record<ExportFormat, string> = { pdf: 'pdf', svg: 'svg', png: 'png', jpeg: 'jpg' };
 
 /** Size of the export in mm (for the dialog). */
-export function exportSize(doc: SketchDocument, opts: Pick<ExportOptions, 'only' | 'margin'>): { w: number; h: number } | null {
+/** Paper size of the export in mm (for the dialog). */
+export function exportSize(doc: SketchDocument, opts: Pick<ExportOptions, 'only' | 'margin' | 'sheet'>): { w: number; h: number } | null {
   const job = collect(doc, { format: 'svg', dpi: 0, background: null, ...opts });
   if (!job.entities.length) return null;
-  return { w: job.box.maxX - job.box.minX, h: job.box.maxY - job.box.minY };
+  return { w: (job.box.maxX - job.box.minX) / job.scale, h: (job.box.maxY - job.box.minY) / job.scale };
 }
