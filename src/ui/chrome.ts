@@ -316,6 +316,7 @@ export function helpDialog(): HTMLDialogElement {
     ['Strich-Punkt-Linie', 'Wird automatisch Symmetrieachse (Knopf am Ende schaltet Spiegeln)'],
     ['X · T · E', 'Objekt löschen · Trimmen · Radierer'],
     ['Q · U · W', 'Rechteck · Ecken verrunden (antippen oder Radius ziehen) · Text'],
+    ['N', 'Nachzeichnen: Linien anderer Ebenen antippen oder überwischen → mit dem aktuellen Stift auf die aktive Ebene'],
     ['H', 'Schraffur: in eine geschlossene Fläche tippen (kleine Lücken werden überbrückt)'],
     ['D', 'Bemaßung: Punkt zu Punkt ziehen, dann Maßlinie platzieren · Linie/Kreis/Bogen antippen · zwei Linien = Winkel'],
     ['P', 'GPS: Bezug oder Toleranzrahmen – auf Element drücken und wegziehen'],

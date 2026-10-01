@@ -22,6 +22,7 @@ export const icons = {
   centerMark: svg('<circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v19M2.5 12h19" stroke-dasharray="5 2 1 2"/>'),
   rect: svg('<rect x="4" y="6" width="16" height="12" rx=".5"/><circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.4" fill="currentColor" stroke="none"/>'),
   fillet: svg('<path d="M4.5 4.5v8a7 7 0 0 0 7 7h8"/><path d="M4.5 19.5h4M4.5 15.5v4" stroke-dasharray="1.5 1.5" opacity=".55"/>'),
+  trace: svg('<path d="M3.5 17.5 13.5 7.5" stroke-dasharray="2 2.2" opacity=".6"/><path d="M8.5 20.5 18.5 10.5"/><path d="m16 5.5 3.5-1 -1 3.5z" fill="currentColor"/><path d="M17.3 6.7 15 9"/>'),
   text: svg('<path d="M5 6.5V5h14v1.5M12 5v14M9.5 19h5"/>'),
   sheet: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="1"/><path d="M11 19.5v-5h9.5M11 17h9.5M15.5 14.5v5" stroke-width="1.2"/>'),
   cloud: svg('<path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.2 4.7 4.7 0 0 0 7 18.5z"/>'),

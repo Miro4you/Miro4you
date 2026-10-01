@@ -55,7 +55,7 @@ function hatchIcon(p: HatchPattern): string {
   };
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1.5" stroke-width="1.1" opacity=".55"/>${lines[p]}</svg>`;
 }
-type EraseId = 'delete' | 'trim' | 'erase' | 'fillet';
+type EraseId = 'delete' | 'trim' | 'erase' | 'fillet' | 'trace';
 
 const SHAPES: { id: ShapeId; tool: ToolId; title: string; icon: string }[] = [
   { id: 'line', tool: 'line', title: 'Linie (L)', icon: icons.line },
@@ -70,6 +70,7 @@ const ERASERS: { id: EraseId; title: string; icon: string }[] = [
   { id: 'trim', title: 'Trimmen bis zum nächsten Schnittpunkt (T)', icon: icons.trim },
   { id: 'erase', title: 'Radierer (E)', icon: icons.eraser },
   { id: 'fillet', title: 'Ecken verrunden: an die Ecke tippen, oder ziehen für den Radius (U)', icon: icons.fillet },
+  { id: 'trace', title: 'Nachzeichnen: Linien anderer Ebenen antippen oder überwischen – mit dem aktuellen Stift auf die aktive Ebene (N)', icon: icons.trace },
 ];
 
 /** Floating, draggable tool palette with pop-out groups. */
@@ -163,7 +164,7 @@ export class Palette {
     });
 
     // Erase group.
-    this.eraseBtn = btn('Ändern: Objekt löschen, Trimmen, Radierer, Verrunden', icons.trim);
+    this.eraseBtn = btn('Ändern: Objekt löschen, Trimmen, Radierer, Verrunden, Nachzeichnen', icons.trim);
     const eraseRow = h('div', { class: 'fly-tools' });
     const eraseFly: Flyout = new Flyout([eraseRow], side, 'fly-wide');
     this.eraseFly = eraseFly;

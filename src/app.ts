@@ -19,6 +19,7 @@ import { DimTool } from './tools/dim';
 import { FilletTool } from './tools/fillet';
 import { RectTool } from './tools/rect';
 import { TextTool } from './tools/text';
+import { TraceTool } from './tools/trace';
 import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
 import { HatchTool } from './tools/hatch';
@@ -39,6 +40,7 @@ export type ToolId =
   | 'trim'
   | 'erase'
   | 'fillet'
+  | 'trace'
   | 'hatch'
   | 'dim'
   | 'gps'
@@ -187,6 +189,7 @@ export class App {
       gps: new GpsTool(this),
       rect: new RectTool(this),
       fillet: new FilletTool(this),
+      trace: new TraceTool(this),
       text: new TextTool(this),
     };
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
@@ -779,6 +782,12 @@ export class App {
 
   private screenSpace(): void {
     this.overlayCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  }
+
+  /** Paint an entity preview onto the overlay (no mirrored copies). */
+  paintPreview(e: Entity, alpha = 0.9): void {
+    this.worldPainter().draw(e, alpha);
+    this.screenSpace();
   }
 
   /** Paint an entity preview (and its mirrored copies) onto the overlay. */

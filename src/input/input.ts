@@ -468,6 +468,9 @@ export class InputController {
       case 'w':
         app.setTool('text');
         break;
+      case 'n':
+        app.setTool('trace');
+        break;
       case 'd':
         app.setTool('dim');
         break;
