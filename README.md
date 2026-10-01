@@ -60,6 +60,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - Bogen startet überall tangential (auch mitten auf Linien, vor- oder rückwärts) bzw. in Zugrichtung
 - Bemaßung: Maßzahl ziehen (entlang, nach außen, Abstand der Maßlinie) – Bezugspunkte bleiben stehen; Doppeltippen bearbeitet den Text
 - Nachzeichnen (N): Linien anderer Ebenen antippen oder überwischen → Kopie mit dem aktuellen Stift auf der aktiven Ebene
+- Linienlängen, Radien und Rechteckseiten rasten in 0,5-mm-Schritten (Winkel-Menü: frei / 0,1 / 0,5 / 1 mm); Shift halten oder einen Finger auflegen zeichnet frei – Fangpunkte gehen immer vor
 - Neues App-Icon (Welle mit Mittellinie und Maß) – auf dem iPad das Home-Bildschirm-Symbol einmal entfernen und neu hinzufügen, damit es erscheint
 
 ## Bedienung
@@ -71,6 +72,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 | Zwei Finger | Verschieben, Zoomen, Drehen |
 | Zwei- / Drei-Finger-Tipp | Rückgängig / Wiederholen |
 | Finger halten beim Zeichnen, oder Alt | Fang kurz aussetzen |
+| Shift halten | Längen frei statt in Schritten |
 | Mausrad | Zoomen |
 | Leertaste + Ziehen, mittlere/rechte Maustaste | Verschieben |
 | V · F · L · C · B | Auswahl · Freihand · Linie · Kreis · Bogen |

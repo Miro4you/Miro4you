@@ -63,8 +63,9 @@ export class CircleTool implements Tool {
     if (st.k === 'draw') {
       const s = this.app.snapPoint(ev.world, ev.pointerType);
       // Snapping onto the centre itself would give radius 0.
-      if (s.hit && dist(s.hit.p, st.c) < 1e-9) {
-        st.p = ev.world;
+      if (!s.hit || dist(s.hit.p, st.c) < 1e-9) {
+        // Free radius: in length steps.
+        st.p = this.app.stepLength(st.c, ev.world);
         st.pHit = null;
       } else {
         st.p = s.p;

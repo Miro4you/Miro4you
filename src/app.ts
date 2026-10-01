@@ -77,6 +77,8 @@ export interface Settings {
   filletRadius: number;
   /** Letter height of new texts in mm. */
   textSize: number;
+  /** Lengths of new lines (and radii, rectangle sides) go in these steps (mm, 0 = free). */
+  lengthStep: number;
 }
 
 /** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
@@ -109,6 +111,7 @@ const DEFAULT_SETTINGS: Settings = {
   gpsMode: 'datum',
   filletRadius: 3,
   textSize: 3.5,
+  lengthStep: 0.5,
 };
 
 /**
@@ -138,6 +141,8 @@ export class App {
   selection = new Set<string>();
   /** Set by the input controller (Alt key / finger held while drawing with the pen). */
   snapSuspended = false;
+  /** Shift held: lengths are free (no length steps) while it is down. */
+  lengthFree = false;
   /** Pen or mouse hovering over the canvas without contact (screen CSS px). */
   private hoverAt: { screen: Vec; type: PointerKind } | null = null;
 
@@ -566,12 +571,27 @@ export class App {
         const r = this.rayHit(anchor, a, this.snapRadius(pointerType) * 1.5, exclude);
         if (r) return r;
       }
-      return { p: a, hit: null };
+      return { p: this.stepLength(anchor, a), hit: null };
     }
     if (s.hit && dist(s.hit.p, anchor) > 1e-9) return s;
     if (this.snapSuspended) return { p: world, hit: null };
-    if (this.settings.angleMode === 'snap') return { p: snapAngle(anchor, world, this.settings.angleStep), hit: null };
-    return { p: softSnapAngle(anchor, world, SOFT_ANGLE_TOL), hit: null };
+    const p = this.settings.angleMode === 'snap' ? snapAngle(anchor, world, this.settings.angleStep) : softSnapAngle(anchor, world, SOFT_ANGLE_TOL);
+    return { p: holdAngle ? this.stepLength(anchor, p) : p, hit: null };
+  }
+
+  /** Length rounded to the length step (unless free: step off, Shift or snapping suspended). */
+  stepValue(len: number): number {
+    const step = this.settings.lengthStep;
+    if (step <= 0 || this.lengthFree || this.snapSuspended) return len;
+    return Math.max(step, Math.round(len / step) * step);
+  }
+
+  /** p moved along anchor→p so the distance is a whole number of length steps. */
+  stepLength(anchor: Vec, p: Vec): Vec {
+    const l = dist(anchor, p);
+    if (l < 1e-9) return p;
+    const k = this.stepValue(l) / l;
+    return { x: anchor.x + (p.x - anchor.x) * k, y: anchor.y + (p.y - anchor.y) * k };
   }
 
   /** Where the ray anchor→target first meets existing geometry near the target (within r). */

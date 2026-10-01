@@ -12,3 +12,4 @@ Gesammelte Rückmeldungen vom iPad-Test und ihr Stand.
 | 5 | Neues App-Icon (Welle) | ✓ |
 | 6 | Schwebender Pencil: Cursorpunkt + Anzeige, was gefangen wird | ✓ |
 | 7 | Mittelpunkte von Linien leichter fangen | ✓ größerer Fangbereich entlang der Linie |
+| 8 | Linienlängen in 0,5-mm-Schritten, außer mit Shift / Finger | ✓ auch Radien und Rechteckseiten; Schrittweite im Winkel-Menü |

@@ -297,7 +297,7 @@ export class Palette {
     this.snapBtn = h('button', { class: 'btn toggle', title: 'Fang an Endpunkten, Mitten, Schnittpunkten (S)' });
     this.snapBtn.innerHTML = `${icons.snap}<span class="cap">Fang</span>`;
     this.snapBtn.addEventListener('click', () => app.updateSettings({ snap: !app.settings.snap }));
-    this.angleBtn = h('button', { class: 'btn toggle', title: 'Winkelfang (A)' });
+    this.angleBtn = h('button', { class: 'btn toggle', title: 'Winkelfang und Längenschritte (A)' });
     const modeRow = h('div', { class: 'seg' });
     for (const [mode, label] of [
       ['snap', 'Einrasten'],
@@ -316,8 +316,28 @@ export class Palette {
       this.angleItems.set(`s${step}`, b);
       stepRow.append(b);
     }
+    const lenRow = h('div', { class: 'seg' });
+    for (const [step, label] of [
+      [0, 'Frei'],
+      [0.1, '0,1'],
+      [0.5, '0,5'],
+      [1, '1 mm'],
+    ] as const) {
+      const b = h('button', { class: 'seg-btn', text: label, 'data-item': '1' });
+      b.addEventListener('click', () => app.updateSettings({ lengthStep: step }));
+      this.angleItems.set(`l${step}`, b);
+      lenRow.append(b);
+    }
     const angleFly = new Flyout(
-      [h('div', { class: 'fly-title', text: 'Winkel' }), modeRow, h('div', { class: 'fly-title', text: 'Schritt' }), stepRow],
+      [
+        h('div', { class: 'fly-title', text: 'Winkel' }),
+        modeRow,
+        h('div', { class: 'fly-title', text: 'Schritt' }),
+        stepRow,
+        h('div', { class: 'fly-title', text: 'Längen in Schritten' }),
+        lenRow,
+        h('div', { class: 'fly-hint', text: 'Shift halten oder beim Zeichnen einen Finger auflegen: frei.' }),
+      ],
       side,
       'fly-wide',
     );
@@ -461,7 +481,10 @@ export class Palette {
     const cap = settings.angleMode === 'snap' ? `${settings.angleStep}°` : settings.angleMode === 'show' ? 'Anz.' : 'Aus';
     this.angleBtn.innerHTML = `${icons.angle}<span class="cap">${cap}</span>`;
     for (const [k, b] of this.angleItems) {
-      b.classList.toggle('active', k === settings.angleMode || (settings.angleMode === 'snap' && k === `s${settings.angleStep}`));
+      b.classList.toggle(
+        'active',
+        k === settings.angleMode || (settings.angleMode === 'snap' && k === `s${settings.angleStep}`) || k === `l${settings.lengthStep}`,
+      );
     }
     this.stabilizer.value = String(settings.stabilizer);
     this.stabilizerValue.textContent = settings.stabilizer ? `${settings.stabilizer} px` : 'aus';

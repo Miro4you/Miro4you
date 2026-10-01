@@ -61,6 +61,7 @@ export class InputController {
     window.addEventListener('blur', () => {
       this.spaceDown = false;
       this.setAlt(false);
+      this.setShift(false);
     });
   }
 
@@ -89,6 +90,7 @@ export class InputController {
   private onDown = (e: PointerEvent): void => {
     const type = this.kind(e);
     this.setAlt(e.altKey);
+    if (type !== 'touch') this.setShift(e.shiftKey);
     if (type === 'touch') {
       this.touchDown(e);
       return;
@@ -119,6 +121,7 @@ export class InputController {
       return;
     }
     this.setAlt(e.altKey);
+    this.setShift(e.shiftKey);
     if (this.mousePan && e.pointerId === this.mousePan.id) {
       const p = this.screenPos(e);
       this.app.cam.panBy(p.x - this.mousePan.last.x, p.y - this.mousePan.last.y);
@@ -243,6 +246,14 @@ export class InputController {
     this.updateSuspension();
   }
 
+  /** Shift held: free lengths instead of length steps. */
+  private setShift(v: boolean): void {
+    if (v === this.app.lengthFree) return;
+    this.app.lengthFree = v;
+    this.refreshDraw();
+    this.app.requestOverlay();
+  }
+
   // ---- touch / gestures ---------------------------------------------------------------
 
   private touchDown(e: PointerEvent): void {
@@ -357,6 +368,7 @@ export class InputController {
 
   private onKeyDown = (e: KeyboardEvent): void => {
     this.setAlt(e.altKey);
+    this.setShift(e.shiftKey);
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     if (target?.closest?.('dialog')) return;
@@ -500,6 +512,7 @@ export class InputController {
 
   private onKeyUp = (e: KeyboardEvent): void => {
     this.setAlt(e.altKey);
+    this.setShift(e.shiftKey);
     if (e.code === 'Space') {
       this.spaceDown = false;
       if (!this.mousePan) this.el.style.cursor = '';

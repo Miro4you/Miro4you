@@ -66,9 +66,19 @@ export class RectTool implements Tool {
     const st = this.state;
     if (st.k !== 'draw') return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
-    st.p = s.p;
+    st.p = s.hit ? s.p : this.stepped(st.a, ev.world);
     st.pHit = s.hit;
     this.app.requestOverlay();
+  }
+
+  /** Free corner: width and height in length steps. */
+  private stepped(a: Vec, p: Vec): Vec {
+    const [ux, uy] = this.axes();
+    const dx = (p.x - a.x) * ux.x + (p.y - a.y) * ux.y;
+    const dy = (p.x - a.x) * uy.x + (p.y - a.y) * uy.y;
+    const sx = Math.sign(dx) * this.app.stepValue(Math.abs(dx));
+    const sy = Math.sign(dy) * this.app.stepValue(Math.abs(dy));
+    return { x: a.x + ux.x * sx + uy.x * sy, y: a.y + ux.y * sx + uy.y * sy };
   }
 
   up(ev: ToolEvent): void {
