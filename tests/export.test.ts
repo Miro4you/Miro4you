@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dimText, dimValue, formatMeasure } from '../src/core/annotations';
+import { dimText, dimTextAnchor, dimValue, dragDimText, formatMeasure, layoutAnno } from '../src/core/annotations';
 import type { DimEntity } from '../src/core/types';
 import { linearDim } from '../src/tools/dim';
 import { textWidthMm, toPdf, toSvg, VectorRecorder } from '../src/export/vector';
@@ -93,5 +93,41 @@ describe('vector export', () => {
 
   it('measures Helvetica text', () => {
     expect(textWidthMm('10', 10)).toBeCloseTo(11.12);
+  });
+});
+
+describe('moving dimension figures', () => {
+  it('slides a linear figure along and away; feature points stay', () => {
+    const d = dim({ p1: { x: 0, y: 0 }, p2: { x: 40, y: 0 }, dir: 0, off: -10 });
+    const anchor = dimTextAnchor(d);
+    expect(anchor).toEqual({ x: 20, y: -10 });
+    const moved = dragDimText(d, { x: 50, y: -15 });
+    expect(moved.p1).toEqual(d.p1);
+    expect(moved.p2).toEqual(d.p2);
+    expect(moved.off).toBeCloseTo(-15);
+    expect(moved.tpos).toBeCloseTo(30);
+    // Outside the extension lines the dimension line runs on under the figure.
+    const l = layoutAnno(moved);
+    const far = Math.max(...l.lines.flat().map((p) => p.x));
+    expect(far).toBeGreaterThan(50);
+    expect(dimTextAnchor(moved)).toEqual({ x: 50, y: -15 });
+  });
+
+  it('turns diameters and slides their figure outside', () => {
+    const d = dim({ type: 'dia', p1: { x: 0, y: 0 }, p2: { x: 10, y: 0 }, off: 0 });
+    const moved = dragDimText(d, { x: 0, y: -25 }, 15);
+    expect(moved.p2.x).toBeCloseTo(0);
+    expect(moved.p2.y).toBeCloseTo(-10);
+    expect(moved.tpos).toBeCloseTo(25);
+    expect(dimText(moved)).toBe('Ø20');
+  });
+
+  it('changes the radius and position of angle figures', () => {
+    const d = dim({ type: 'ang', p1: { x: 0, y: 0 }, p2: { x: 10, y: 0 }, p3: { x: 0, y: 10 }, off: 8 });
+    const q = { x: Math.cos(Math.PI / 8) * 15, y: Math.sin(Math.PI / 8) * 15 };
+    const moved = dragDimText(d, q);
+    expect(moved.off).toBeCloseTo(15);
+    expect(moved.tpos).toBeCloseTo(-Math.PI / 8);
+    expect(dimValue(moved)).toBeCloseTo(90);
   });
 });

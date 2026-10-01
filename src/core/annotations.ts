@@ -127,17 +127,90 @@ export function dimText(e: DimEntity): string {
   }
 }
 
+/** Frame of a linear dimension: dimension line d1–d2, its direction and the normal. */
+function linFrame(e: DimEntity) {
+  const u = { x: Math.cos(e.dir ?? 0), y: Math.sin(e.dir ?? 0) };
+  const n = perp(u);
+  const s1 = e.p1.x * n.x + e.p1.y * n.y;
+  const s2 = e.p2.x * n.x + e.p2.y * n.y;
+  const base = s1 + e.off;
+  const d1 = add(e.p1, n, base - s1);
+  const d2 = add(e.p2, n, base - s2);
+  const len = dist(d1, d2);
+  const along = len > 1e-9 ? unit({ x: d2.x - d1.x, y: d2.y - d1.y }) : u;
+  const m = { x: (d1.x + d2.x) / 2, y: (d1.y + d2.y) / 2 };
+  return { u, n, s1, s2, base, d1, d2, len, along, m };
+}
+
+/** Frame of an angular dimension: vertex, first leg angle, signed sweep, arc radius. */
+function angFrame(e: DimEntity) {
+  const v = e.p1;
+  const p3 = e.p3 ?? e.p2;
+  const a1 = Math.atan2(e.p2.y - v.y, e.p2.x - v.x);
+  const a2 = Math.atan2(p3.y - v.y, p3.x - v.x);
+  const sweep = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
+  return { v, p3, a1, a2, sweep, R: Math.max(e.off, 1) };
+}
+
+/** Gap between a dimension line extended under its figure and the figure's end. */
+const TEXT_RUN = 0.6;
+
+/**
+ * Point on the dimension line (or arc) under the middle of the figure – where it
+ * is grabbed to move the figure along the line and the line itself.
+ */
+export function dimTextAnchor(e: DimEntity): Vec {
+  if (e.type === 'lin') {
+    const f = linFrame(e);
+    return add(f.m, f.along, e.tpos ?? 0);
+  }
+  if (e.type === 'dia' || e.type === 'rad') {
+    const rad = dist(e.p1, e.p2);
+    const u = unit({ x: e.p2.x - e.p1.x, y: e.p2.y - e.p1.y });
+    return add(e.p1, u, e.tpos ?? rad * 0.5);
+  }
+  const f = angFrame(e);
+  const am = f.a1 + f.sweep / 2 + (e.tpos ?? 0);
+  return add(f.v, { x: Math.cos(am), y: Math.sin(am) }, f.R);
+}
+
+/**
+ * The dimension with its figure dragged to q (the feature points stay):
+ * linear – along the line and the line's distance; diameter/radius – direction
+ * and position along it (inside or outside); angle – arc radius and position.
+ * `stepDeg` snaps the direction of diameters and radii.
+ */
+export function dragDimText(e: DimEntity, q: Vec, stepDeg = 0): DimEntity {
+  if (e.type === 'lin') {
+    const f = linFrame(e);
+    const off = (q.x - e.p1.x) * f.n.x + (q.y - e.p1.y) * f.n.y;
+    const tpos = (q.x - f.m.x) * f.along.x + (q.y - f.m.y) * f.along.y;
+    // The middle is a natural resting place: the figure settles there within 1 mm.
+    return { ...e, off, tpos: Math.abs(tpos) < 1 ? undefined : tpos };
+  }
+  if (e.type === 'dia' || e.type === 'rad') {
+    const rad = dist(e.p1, e.p2);
+    let a = Math.atan2(q.y - e.p1.y, q.x - e.p1.x);
+    if (stepDeg > 0) {
+      const st = (stepDeg * Math.PI) / 180;
+      a = Math.round(a / st) * st;
+    }
+    const u = { x: Math.cos(a), y: Math.sin(a) };
+    return { ...e, p2: add(e.p1, u, rad), tpos: Math.max(0, dist(q, e.p1)) };
+  }
+  const f = angFrame(e);
+  const aq = Math.atan2(q.y - f.v.y, q.x - f.v.x);
+  const mid = f.a1 + f.sweep / 2;
+  const tpos = Math.atan2(Math.sin(aq - mid), Math.cos(aq - mid));
+  return { ...e, off: Math.max(1, dist(q, f.v)), tpos: Math.abs(tpos) < 1e-3 ? undefined : tpos };
+}
+
 function layoutDim(e: DimEntity): AnnoLayout {
   const L: AnnoLayout = { lines: [], arcs: [], fills: [], texts: [] };
   const text = dimText(e);
+  const w = textWidth(text, TEXT_H);
   if (e.type === 'lin') {
-    const u = { x: Math.cos(e.dir ?? 0), y: Math.sin(e.dir ?? 0) };
-    const n = perp(u);
-    const s1 = e.p1.x * n.x + e.p1.y * n.y;
-    const s2 = e.p2.x * n.x + e.p2.y * n.y;
-    const base = s1 + e.off;
-    const d1 = add(e.p1, n, base - s1);
-    const d2 = add(e.p2, n, base - s2);
+    const { n, s1, s2, base, d1, d2, len, along, u, m } = linFrame(e);
     // Extension lines run from the feature past the dimension line.
     for (const [p, d, s] of [
       [e.p1, d1, s1],
@@ -147,37 +220,38 @@ function layoutDim(e: DimEntity): AnnoLayout {
       L.lines.push([p, add(d, n, side * EXT_OVER)]);
     }
     L.lines.push([d1, d2]);
-    const len = dist(d1, d2);
-    const along = unit({ x: d2.x - d1.x, y: d2.y - d1.y });
-    if (len > 2 * ARROW_L + 0.5) {
+    const short = len <= 2 * ARROW_L + 0.5;
+    if (!short) {
       L.fills.push(arrow(d1, { x: -along.x, y: -along.y }), arrow(d2, along));
     } else {
       // Short: arrows outside pointing in.
       L.fills.push(arrow(d1, along), arrow(d2, { x: -along.x, y: -along.y }));
       L.lines.push([d1, add(d1, along, -ARROW_L * 2)], [d2, add(d2, along, ARROW_L * 2)]);
     }
+    const tp = e.tpos ?? 0;
+    // A figure moved past the ends sits on the extended dimension line.
+    const reach = short ? len / 2 + ARROW_L * 2 : len / 2;
+    if (tp + w / 2 > reach) L.lines.push([add(m, along, reach), add(m, along, tp + w / 2 + TEXT_RUN)]);
+    if (tp - w / 2 < -reach) L.lines.push([add(m, along, -reach), add(m, along, tp - w / 2 - TEXT_RUN)]);
     const r = readable(len > 1e-9 ? along : u);
-    const m = { x: (d1.x + d2.x) / 2, y: (d1.y + d2.y) / 2 };
-    L.texts.push({ p: add(m, above(r), TEXT_GAP), angle: Math.atan2(r.y, r.x), text, size: TEXT_H, baseline: 'bottom' });
+    L.texts.push({ p: add(add(m, along, tp), above(r), TEXT_GAP), angle: Math.atan2(r.y, r.x), text, size: TEXT_H, baseline: 'bottom' });
   } else if (e.type === 'dia' || e.type === 'rad') {
     const c = e.p1;
     const rad = dist(c, e.p2);
     const u = unit({ x: e.p2.x - c.x, y: e.p2.y - c.y });
     const tip = add(c, u, rad);
-    const from = e.type === 'dia' ? add(c, u, -rad) : c;
+    const fromT = e.type === 'dia' ? -rad : 0;
+    const from = add(c, u, fromT);
     L.lines.push([from, tip]);
     L.fills.push(arrow(tip, u));
     if (e.type === 'dia') L.fills.push(arrow(from, { x: -u.x, y: -u.y }));
+    const tp = e.tpos ?? rad * 0.5;
+    if (tp + w / 2 > rad) L.lines.push([tip, add(c, u, tp + w / 2 + TEXT_RUN)]);
+    if (tp - w / 2 < fromT) L.lines.push([from, add(c, u, tp - w / 2 - TEXT_RUN)]);
     const r = readable(u);
-    const m = e.type === 'dia' ? add(c, u, rad * 0.5) : add(c, u, rad * 0.5);
-    L.texts.push({ p: add(m, above(r), TEXT_GAP), angle: Math.atan2(r.y, r.x), text, size: TEXT_H, baseline: 'bottom' });
+    L.texts.push({ p: add(add(c, u, tp), above(r), TEXT_GAP), angle: Math.atan2(r.y, r.x), text, size: TEXT_H, baseline: 'bottom' });
   } else {
-    const v = e.p1;
-    const p3 = e.p3 ?? e.p2;
-    const a1 = Math.atan2(e.p2.y - v.y, e.p2.x - v.x);
-    const a2 = Math.atan2(p3.y - v.y, p3.x - v.x);
-    const sweep = Math.atan2(Math.sin(a2 - a1), Math.cos(a2 - a1));
-    const R = Math.max(e.off, 1);
+    const { v, p3, a1, a2, sweep, R } = angFrame(e);
     L.arcs.push({ c: v, r: R, start: a1, sweep });
     // Extension lines where the legs end before the arc.
     for (const [p, a] of [
@@ -195,7 +269,13 @@ function layoutDim(e: DimEntity): AnnoLayout {
     const t1 = { x: sgn * Math.sin(a1), y: -sgn * Math.cos(a1) };
     const t2 = { x: -sgn * Math.sin(a1 + sweep), y: sgn * Math.cos(a1 + sweep) };
     L.fills.push(arrow(end1, t1), arrow(end2, t2));
-    const am = a1 + sweep / 2;
+    const am = a1 + sweep / 2 + (e.tpos ?? 0);
+    // Figure moved beyond the arc: extend the arc under it.
+    const half = (w / 2 + TEXT_RUN) / R;
+    const lo = Math.min(a1, a1 + sweep);
+    const hi = Math.max(a1, a1 + sweep);
+    if (am + half > hi) L.arcs.push({ c: v, r: R, start: hi, sweep: am + half - hi });
+    if (am - half < lo) L.arcs.push({ c: v, r: R, start: lo, sweep: am - half - lo });
     const mid = add(v, { x: Math.cos(am), y: Math.sin(am) }, R);
     const tangent = { x: -Math.sin(am), y: Math.cos(am) };
     const r = readable(tangent);
@@ -568,6 +648,19 @@ export function textCorners(t: AnnoText): Vec[] {
   const a = origin;
   const b = add(origin, r, w);
   return [a, b, add(b, up, t.size), add(a, up, t.size)];
+}
+
+/** Whether p lies on one of the texts of an annotation (inside its box). */
+export function insideAnnoText(e: LaidOut, p: Vec): boolean {
+  for (const t of layoutAnno(e).texts) {
+    const c = textCorners(t);
+    let inside = false;
+    for (let i = 0, j = c.length - 1; i < c.length; j = i++) {
+      if (c[i].y > p.y !== c[j].y > p.y && p.x < ((c[j].x - c[i].x) * (p.y - c[i].y)) / (c[j].y - c[i].y) + c[i].x) inside = !inside;
+    }
+    if (inside) return true;
+  }
+  return false;
 }
 
 /** All outline segments of a layout (texts as boxes, arcs flattened) – for hit tests and bounds. */

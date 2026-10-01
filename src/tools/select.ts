@@ -8,9 +8,12 @@ import { ACCENT, drawKnob, drawLasso, drawMeasureLabel, drawPill, drawSnapMarker
 import { drawGrips, GripDrag, gripsFor, hitGrip } from './grips';
 import { selectionBox } from './selection-actions';
 import type { Tool, ToolEvent } from './tool';
+import { editAnnotation, hasEditableText } from '../ui/edit-annotation';
 
 /** Movement (CSS px) after which a press becomes a drag. */
 const DRAG_PX = 6;
+const DOUBLE_TAP_MS = 450;
+const DOUBLE_TAP_PX = 24;
 /** Distance (CSS px) of the rotate knob above the selection frame. */
 const ROTATE_KNOB_PX = 30;
 
@@ -36,11 +39,14 @@ function pointInPolygon(p: Vec, poly: Vec[]): boolean {
  * Selection: tap objects to add or remove them, tap empty paper to clear,
  * draw a loop on empty paper to add everything inside. Drag a selected object
  * to move the selection (with snapping), use the knob above the frame to rotate,
- * and the grips of a single object to edit it.
+ * and the grips of a single object to edit it. Dragging a dimension moves only
+ * its figure and line; a double tap edits the text of dimensions, texts and
+ * symbols.
  */
 export class SelectTool implements Tool {
   readonly id = 'select';
   private state: State = { k: 'idle' };
+  private lastTap: { id: string; t: number; screen: Vec } | null = null;
 
   constructor(private app: App) {}
 
@@ -75,7 +81,8 @@ export class SelectTool implements Tool {
   down(ev: ToolEvent): void {
     const sel = this.app.selectedEntities();
     const r = this.app.handleHitRadius(ev.pointerType);
-    const g = hitGrip(this.app, this.singleGrips(sel), ev.screen, r);
+    // A dimension's figure is dragged through the press below (so a double tap still edits it).
+    const g = hitGrip(this.app, this.singleGrips(sel).filter((x) => x.key !== 'text'), ev.screen, r);
     if (g) {
       this.state = { k: 'grip', drag: new GripDrag(this.app, g, sel[0], ev.screen) };
       this.app.requestOverlay();
@@ -100,6 +107,18 @@ export class SelectTool implements Tool {
         const sel = this.app.selectedEntities();
         const f = this.frame(sel);
         const insideFrame = f && pointInPolygon(st.screen, f.corners);
+        // Dragging a dimension moves its figure and line; the feature points stay.
+        const dim = st.hit?.kind === 'dim' ? st.hit : null;
+        if (dim && (!this.app.selection.has(dim.id) || this.app.selection.size === 1)) {
+          this.app.setSelection([dim.id]);
+          const g = gripsFor(this.app, dim, 'grips').find((x) => x.key === 'text');
+          if (g) {
+            const drag = new GripDrag(this.app, g, dim, st.screen);
+            this.state = { k: 'grip', drag };
+            drag.move(ev);
+            return;
+          }
+        }
         if (st.hit || insideFrame) {
           if (st.hit && !this.app.selection.has(st.hit.id)) this.app.setSelection([st.hit.id]);
           const moving = this.app.selectedEntities();
@@ -164,6 +183,16 @@ export class SelectTool implements Tool {
     this.state = { k: 'idle' };
     switch (st.k) {
       case 'press': {
+        // Double tap on a dimension, text or symbol: edit its text.
+        const now = performance.now();
+        const last = this.lastTap;
+        this.lastTap = st.hit ? { id: st.hit.id, t: now, screen: st.screen } : null;
+        if (st.hit && last && last.id === st.hit.id && now - last.t < DOUBLE_TAP_MS && dist(last.screen, st.screen) < DOUBLE_TAP_PX && hasEditableText(st.hit)) {
+          this.lastTap = null;
+          this.app.setSelection([st.hit.id]);
+          void editAnnotation(this.app, st.hit);
+          break;
+        }
         // Tap: toggle the object, or clear on empty paper.
         if (st.hit) {
           const next = new Set(this.app.selection);

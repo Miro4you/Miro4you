@@ -9,7 +9,7 @@ import {
   type Box,
   type Vec,
 } from './geom';
-import { layoutAnno, layoutSegments } from './annotations';
+import { insideAnnoText, layoutAnno, layoutSegments } from './annotations';
 import { isAnnotation, type Annotation, type ArcEntity, type Entity } from './types';
 
 /** Outline segments of an annotation (hatch loops, dimension lines, frames, text boxes). */
@@ -275,6 +275,8 @@ export function project(e: Entity, p: Vec): { s: number; point: Vec; d: number }
     }
     default: {
       if (e.kind === 'hatch' && insideHatch(e.loops, p)) return { s: 0, point: p, d: 0 };
+      // Texts are hit anywhere on them, not just at their outline.
+      if (e.kind !== 'hatch' && isAnnotation(e) && insideAnnoText(e, p)) return { s: 0, point: p, d: 0 };
       let best = { s: 0, point: p, d: Infinity };
       for (const [a, b] of annoSegments(e)) {
         const c = closestOnSegment(p, a, b);

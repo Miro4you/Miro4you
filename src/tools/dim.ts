@@ -5,6 +5,9 @@ import type { SnapHit } from '../core/snap';
 import type { ArcEntity, CircleEntity, DimEntity, LineEntity, Style } from '../core/types';
 import { ACCENT, drawGuideLine, drawMeasureLabel, drawSnapMarker } from '../render/overlay';
 import type { Tool, ToolEvent } from './tool';
+import { GripDrag, gripsFor } from './grips';
+import { editAnnotation } from '../ui/edit-annotation';
+import { insideAnnoText } from '../core/annotations';
 
 const DRAG_PX = 8;
 
@@ -17,7 +20,9 @@ type State =
   | { k: 'idle' }
   | { k: 'press'; start: Vec; p1: Vec; hit: SnapHit | null; cur: Vec; curHit: SnapHit | null; moved: boolean }
   | { k: 'leg'; line: LineEntity; press: Vec | null }
-  | { k: 'place'; place: Place; q: Vec | null };
+  | { k: 'place'; place: Place; q: Vec | null }
+  /** Pressed on the figure of an existing dimension: drag to move it, tap to edit. */
+  | { k: 'adjust'; drag: GripDrag; start: Vec; moved: boolean; e: DimEntity };
 
 /** Intersection of two infinite lines, or null when (nearly) parallel. */
 function lineCross(a: LineEntity, b: LineEntity): Vec | null {
@@ -64,7 +69,8 @@ export function linearDim(p1: Vec, p2: Vec, q: Vec): { dir: number; off: number 
 /**
  * Dimension tool (DIN 406): drag from point to point, then place the dimension
  * line; tap a line and place it; tap a circle (Ø) or arc (R); tap two lines for
- * the angle, the pointer picks the sector.
+ * the angle, the pointer picks the sector. Drag the figure of an existing
+ * dimension to move it (along, outside, line distance); tap it to edit the text.
  */
 export class DimTool implements Tool {
   readonly id = 'dim';
@@ -73,7 +79,14 @@ export class DimTool implements Tool {
   constructor(private app: App) {}
 
   get busy(): boolean {
-    return this.state.k === 'press';
+    return this.state.k === 'press' || this.state.k === 'adjust';
+  }
+
+  /** Existing (editable) dimension whose figure lies under p. */
+  private figureAt(p: Vec): DimEntity | null {
+    let found: DimEntity | null = null;
+    for (const e of this.app.doc.visibleEntities(false)) if (e.kind === 'dim' && insideAnnoText(e, p)) found = e;
+    return found;
   }
 
   get hoverSnap(): boolean {
@@ -161,6 +174,15 @@ export class DimTool implements Tool {
       this.app.requestOverlay();
       return;
     }
+    const fig = this.figureAt(ev.world);
+    if (fig) {
+      const g = gripsFor(this.app, fig, 'grips').find((x) => x.key === 'text');
+      if (g) {
+        this.state = { k: 'adjust', drag: new GripDrag(this.app, g, fig, ev.screen), start: ev.screen, moved: false, e: fig };
+        this.app.requestOverlay();
+        return;
+      }
+    }
     if (!this.app.ensureDrawableLayer()) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
     this.state = { k: 'press', start: ev.screen, p1: s.p, hit: s.hit, cur: s.p, curHit: null, moved: false };
@@ -169,6 +191,11 @@ export class DimTool implements Tool {
 
   move(ev: ToolEvent): void {
     const st = this.state;
+    if (st.k === 'adjust') {
+      if (!st.moved && dist(st.start, ev.screen) > DRAG_PX) st.moved = true;
+      if (st.moved) st.drag.move(ev);
+      return;
+    }
     if (st.k === 'press') {
       if (!st.moved && dist(st.start, ev.screen) > DRAG_PX) st.moved = true;
       if (st.moved) {
@@ -188,6 +215,15 @@ export class DimTool implements Tool {
 
   up(ev: ToolEvent): void {
     const st = this.state;
+    if (st.k === 'adjust') {
+      this.state = { k: 'idle' };
+      if (st.moved) {
+        st.drag.move(ev);
+        st.drag.end();
+      } else void editAnnotation(this.app, st.e);
+      this.app.requestOverlay();
+      return;
+    }
     if (st.k === 'place') {
       this.commit(st.place, ev.world);
       return;
@@ -237,6 +273,7 @@ export class DimTool implements Tool {
   }
 
   cancel(): void {
+    if (this.state.k === 'adjust') this.state.drag.cancel();
     this.state = { k: 'idle' };
     this.app.requestOverlay();
   }
@@ -262,6 +299,11 @@ export class DimTool implements Tool {
   overlay(ctx: CanvasRenderingContext2D): void {
     const st = this.state;
     const cam = this.app.cam;
+    if (st.k === 'adjust') {
+      const cur = this.app.doc.get(st.e.id);
+      if (cur) this.app.paintHighlight([cur], ACCENT, 0.25);
+      return;
+    }
     if (st.k === 'press') {
       if (st.hit) drawSnapMarker(ctx, cam.toScreen(st.p1), st.hit.kind);
       if (st.moved) {

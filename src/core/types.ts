@@ -96,6 +96,12 @@ export interface DimEntity extends EntityBase {
   off: number;
   /** Text instead of the measured value. */
   text?: string;
+  /**
+   * Position of the figure: linear – mm along the dimension line from its middle;
+   * diameter/radius – mm from the centre along the line (default: half the
+   * radius); angle – radians from the middle of the arc.
+   */
+  tpos?: number;
 }
 
 export type GpsSymbol =

@@ -116,6 +116,8 @@ export function transformEntity<T extends Entity>(e: T, m: Affine, id: string = 
         ...(e.p3 ? { p3: applyAffine(m, e.p3) } : {}),
         ...(e.dir !== undefined ? { dir: mapAngle(m, e.dir) } : {}),
         off: e.type === 'lin' && flip ? -e.off : e.off,
+        // Mirroring reverses the arc of angular dimensions.
+        ...(e.type === 'ang' && flip && e.tpos !== undefined ? { tpos: -e.tpos } : {}),
       };
     }
     case 'datum':

@@ -1,4 +1,5 @@
 import type { App } from '../app';
+import { dimTextAnchor, dragDimText } from '../core/annotations';
 import { arcEnds, arcPoint } from '../core/curves';
 import { dist, normAngle, type Vec } from '../core/geom';
 import type { SnapHit } from '../core/snap';
@@ -21,6 +22,8 @@ export interface Grip {
   kind: KnobKind;
   /** Reference point for angle snapping while dragging (e.g. the other end of a line). */
   angleFrom?: Vec;
+  /** Follows the pointer without snapping to geometry (e.g. a dimension figure). */
+  free?: boolean;
   /** The entity with the grabbed point moved to `target` (world). */
   apply(target: Vec): Entity;
 }
@@ -92,6 +95,21 @@ export function gripsFor(app: App, e: Entity, style: GripStyle): Grip[] {
         { key: 'r', anchor: mid, offset: off(screenDir(e.c, mid)), kind: 'radius', apply: (t) => ({ ...e, r: Math.max(1e-3, dist(e.c, t)) }) },
         { key: 'c', anchor: e.c, offset: knobs ? { x: -20, y: -20 } : { x: 0, y: 0 }, kind: 'move', apply: (t) => ({ ...e, c: t }) },
       ];
+    }
+    case 'dim': {
+      // The figure (on the dimension line under it) moves along and away; the
+      // feature points can be re-attached elsewhere with snapping.
+      const step = app.settings.angleMode === 'snap' ? 15 : 0;
+      const grips: Grip[] = [
+        { key: 'text', anchor: dimTextAnchor(e), offset: { x: 0, y: 0 }, kind: 'move', free: true, apply: (t) => dragDimText(e, t, step) },
+      ];
+      if (e.type === 'lin') {
+        grips.push(
+          { key: 'p1', anchor: e.p1, offset: { x: 0, y: 0 }, kind: 'end', apply: (t) => ({ ...e, p1: t }) },
+          { key: 'p2', anchor: e.p2, offset: { x: 0, y: 0 }, kind: 'end', apply: (t) => ({ ...e, p2: t }) },
+        );
+      }
+      return grips;
     }
     default:
       return [];
@@ -174,9 +192,11 @@ export class GripDrag {
   move(ev: ToolEvent): void {
     const target = this.app.cam.toWorld({ x: ev.screen.x - this.grab.x, y: ev.screen.y - this.grab.y });
     const exclude = new Set([this.before.id]);
-    const r = this.grip.angleFrom
-      ? this.app.resolveEnd(this.grip.angleFrom, target, ev.pointerType, exclude)
-      : this.app.snapPoint(target, ev.pointerType, exclude);
+    const r = this.grip.free
+      ? { p: target, hit: null }
+      : this.grip.angleFrom
+        ? this.app.resolveEnd(this.grip.angleFrom, target, ev.pointerType, exclude)
+        : this.app.snapPoint(target, ev.pointerType, exclude);
     this.hit = r.hit;
     const next = this.grip.apply(r.p);
     this.app.doc.replaceTransient(next);
