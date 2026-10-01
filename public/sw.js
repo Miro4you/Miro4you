@@ -1,5 +1,5 @@
 // Offline support: network first for pages, cache first (with background refresh) for assets.
-const CACHE = 'skizzen-cad-v1';
+const CACHE = 'skizzen-cad-v2';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon.svg'])));

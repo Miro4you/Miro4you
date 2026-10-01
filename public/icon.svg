@@ -1,9 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="112" fill="#fbfaf6"/>
-  <g stroke="#2b63e6" stroke-opacity=".14" stroke-width="4">
-    <path d="M0 128h512M0 256h512M0 384h512M128 0v512M256 0v512M384 0v512"/>
+  <g stroke="#2b63e6" stroke-opacity=".07" stroke-width="3">
+    <path d="M0 64h512M0 128h512M0 192h512M0 256h512M0 320h512M0 384h512M0 448h512M64 0v512M128 0v512M192 0v512M256 0v512M320 0v512M384 0v512M448 0v512"/>
   </g>
-  <path d="M132 380 380 132" stroke="#121212" stroke-width="22" stroke-linecap="round"/>
-  <path d="M112 256h288" stroke="#121212" stroke-width="10" stroke-linecap="round" stroke-dasharray="64 16 1 16"/>
-  <rect x="362" y="114" width="36" height="36" rx="4" fill="none" stroke="#2b63e6" stroke-width="10"/>
+  <!-- centre line -->
+  <path d="M40 286h432" stroke="#6b6f78" stroke-width="6" stroke-linecap="round" stroke-dasharray="52 13 2 13"/>
+  <!-- stepped shaft: journal, collar, shaft end (side view, chamfered ends) -->
+  <g fill="none" stroke="#121212" stroke-width="14" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M70 252 86 236H200V190H300V218H426L442 234V338L426 354H300V382H200V336H86L70 320Z"/>
+    <path d="M200 236V336M300 218V354"/>
+  </g>
+  <!-- dimension over the collar -->
+  <g stroke="#2b63e6" stroke-width="6" stroke-linecap="round">
+    <path d="M200 172V100M300 172V100M222 116H278"/>
+  </g>
+  <path d="M203 116 231 104V128ZM297 116 269 104V128Z" fill="#2b63e6"/>
 </svg>

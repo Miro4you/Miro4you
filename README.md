@@ -53,6 +53,15 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - Graphit-Härten 2H / HB / 2B (hell bis dunkel) im Stift-Menü
 - Online-Ablage auf dem eigenen Server (z. B. Raspberry Pi): Zeichnungen mit Vorschaubild speichern, öffnen, überschreiben, löschen; optional mit Passwort
 
+**Feedback-Runde nach Phase 4**
+
+- Schwebender Pencil zeigt einen kleinen Cursorpunkt; Zeichenwerkzeuge zeigen den Fangpunkt, den ein Aufsetzen träfe, und blass die Fangpunkte in der Nähe
+- Linien- und Bogenmitten fangen schon aus 1,8-facher Entfernung entlang der Linie
+- Bogen startet überall tangential (auch mitten auf Linien, vor- oder rückwärts) bzw. in Zugrichtung
+- Bemaßung: Maßzahl ziehen (entlang, nach außen, Abstand der Maßlinie) – Bezugspunkte bleiben stehen; Doppeltippen bearbeitet den Text
+- Nachzeichnen (N): Linien anderer Ebenen antippen oder überwischen → Kopie mit dem aktuellen Stift auf der aktiven Ebene
+- Neues App-Icon (Welle mit Mittellinie und Maß) – auf dem iPad das Home-Bildschirm-Symbol einmal entfernen und neu hinzufügen, damit es erscheint
+
 ## Bedienung
 
 | Eingabe | Aktion |
@@ -68,7 +77,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 | K | Achsenkreuz |
 | X · T · E | Objekt löschen · Trimmen · Radierer |
 | H · D · P | Schraffur · Bemaßung · GPS-Symbol |
-| Q · U · W | Rechteck · Ecken verrunden · Text |
+| Q · U · W · N | Rechteck · Ecken verrunden · Text · Nachzeichnen |
 | Entf · ⌘D · ⌘A · Pfeile | Auswahl löschen · duplizieren · alles wählen · verschieben |
 | 1–4 / 5–9 | Bleistift- / Tuschestärken |
 | ⇧1–⇧5 | Linienart |
