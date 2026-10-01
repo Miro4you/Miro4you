@@ -14,12 +14,15 @@ type State = { k: 'idle' } | { k: 'draw'; a: Vec; aHit: SnapHit | null; p: Vec; 
 export class RectTool implements Tool {
   readonly id = 'rect';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k !== 'idle';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   /** World directions of screen right and screen down. */
@@ -53,7 +56,6 @@ export class RectTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     if (!this.app.ensureDrawableLayer()) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
     this.state = { k: 'draw', a: s.p, aHit: s.hit, p: s.p, pHit: null };
@@ -90,18 +92,10 @@ export class RectTool implements Tool {
     this.app.requestOverlay();
   }
 
-  hover(ev: ToolEvent | null): void {
-    if (this.state.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
-    }
-  }
+  hover(): void {}
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -114,8 +108,6 @@ export class RectTool implements Tool {
       const { w, h } = this.corners(st.a, st.p);
       const s = cam.toScreen(st.p);
       drawPill(ctx, { x: s.x, y: s.y + 34 }, `${formatLength(w, cam.scale)} × ${formatLength(h, cam.scale)}`);
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

@@ -17,13 +17,16 @@ type State = { k: 'idle' } | { k: 'press'; start: Vec; at: Vec; hit: SnapHit | n
 export class TextTool implements Tool {
   readonly id = 'text';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
   private dialogOpen = false;
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k !== 'idle';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   /** Direction of the screen's x axis in the world (text stays horizontal on screen). */
@@ -34,7 +37,6 @@ export class TextTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     if (this.dialogOpen) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
     this.state = { k: 'press', start: ev.screen, at: s.p, hit: s.hit, p: s.p, moved: false };
@@ -89,18 +91,10 @@ export class TextTool implements Tool {
     this.app.requestOverlay();
   }
 
-  hover(ev: ToolEvent | null): void {
-    if (this.state.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
-    }
-  }
+  hover(): void {}
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -109,8 +103,6 @@ export class TextTool implements Tool {
     if (st.k === 'press') {
       if (st.hit) drawSnapMarker(ctx, cam.toScreen(st.at), st.hit.kind);
       if (st.moved) drawGuideLine(ctx, cam.toScreen(st.at), cam.toScreen(st.p));
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

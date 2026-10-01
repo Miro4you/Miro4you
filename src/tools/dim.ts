@@ -69,12 +69,15 @@ export function linearDim(p1: Vec, p2: Vec, q: Vec): { dir: number; off: number 
 export class DimTool implements Tool {
   readonly id = 'dim';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k === 'press';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   private thinStyle(): Style {
@@ -147,7 +150,6 @@ export class DimTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     const st = this.state;
     if (st.k === 'place') {
       st.q = ev.world;
@@ -247,13 +249,6 @@ export class DimTool implements Tool {
         else this.legHover = ev.world;
         this.app.requestOverlay();
       }
-      return;
-    }
-    if (st.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
     }
   }
 
@@ -261,7 +256,6 @@ export class DimTool implements Tool {
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
     this.legHover = null;
   }
 
@@ -290,8 +284,6 @@ export class DimTool implements Tool {
         const e = this.build(st.place, st.q, true);
         if (e) this.app.paintWorld(e);
       }
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

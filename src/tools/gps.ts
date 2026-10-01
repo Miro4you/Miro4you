@@ -29,13 +29,16 @@ export function nextDatumLetter(entities: Iterable<Entity>): string {
 export class GpsTool implements Tool {
   readonly id = 'gps';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
   private lastSpec: GtolSpec = { sym: 'flatness', value: '0,05', dia: false, datums: [] };
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k !== 'idle';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   private get mode(): 'datum' | 'gtol' {
@@ -79,7 +82,6 @@ export class GpsTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     if (!this.app.ensureDrawableLayer()) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
     this.state = { k: 'press', start: ev.screen, at: s.p, hit: s.hit, p: s.p, moved: false };
@@ -119,18 +121,10 @@ export class GpsTool implements Tool {
     this.app.requestOverlay();
   }
 
-  hover(ev: ToolEvent | null): void {
-    if (this.state.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
-    }
-  }
+  hover(): void {}
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -139,8 +133,6 @@ export class GpsTool implements Tool {
     if (st.k === 'press') {
       if (st.hit) drawSnapMarker(ctx, cam.toScreen(st.at), st.hit.kind);
       if (st.moved) this.app.paintWorld(this.preview(st.at, st.p));
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

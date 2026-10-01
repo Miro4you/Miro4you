@@ -26,4 +26,9 @@ export interface Tool {
   reset(): void;
   /** True while a gesture is in progress. */
   readonly busy: boolean;
+  /**
+   * True when the next press snaps to geometry: the app then shows the snap
+   * point (and nearby candidates) under the hovering pen or mouse.
+   */
+  readonly hoverSnap?: boolean;
 }

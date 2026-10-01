@@ -61,7 +61,7 @@ const SHAPES: { id: ShapeId; tool: ToolId; title: string; icon: string }[] = [
   { id: 'line', tool: 'line', title: 'Linie (L)', icon: icons.line },
   { id: 'rect', tool: 'rect', title: 'Rechteck: von Ecke zu Ecke (Q)', icon: icons.rect },
   { id: 'circle', tool: 'circle', title: 'Kreis: Mittelpunkt, dann Radius (C)', icon: icons.circle },
-  { id: 'arc', tool: 'arc', title: 'Bogen: am Linienende tangential, sonst Mittelpunkt zuerst (B)', icon: icons.arc },
+  { id: 'arc', tool: 'arc', title: 'Bogen: losziehen in Startrichtung – auf Linien tangential, vor- oder rückwärts (B)', icon: icons.arc },
   { id: 'arc-center', tool: 'arc', title: 'Bogen um Mittelpunkt', icon: icons.arcCenter },
   { id: 'cross', tool: 'cross', title: 'Achsenkreuz: Mittelpunkt, dann Armlänge (K)', icon: icons.cross },
 ];
@@ -147,7 +147,7 @@ export class Palette {
     });
 
     // Shapes group.
-    this.shapeBtn = btn('Formen: Linie, Kreis, Bogen, Achsenkreuz', icons.line);
+    this.shapeBtn = btn('Formen: Linie, Rechteck, Kreis, Bogen, Achsenkreuz', icons.line);
     const shapeFly: Flyout = new Flyout(
       SHAPES.map((s) => {
         const b = item(s.title, s.icon, () => this.pickShape(s.id), () => shapeFly);

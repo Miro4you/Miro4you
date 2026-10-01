@@ -26,10 +26,28 @@ export function drawGuideLine(ctx: CanvasRenderingContext2D, a: Vec, b: Vec): vo
   ctx.restore();
 }
 
-export function drawSnapMarker(ctx: CanvasRenderingContext2D, p: Vec, kind: SnapKind): void {
-  const r = 6;
+/** Small dot where a hovering pen would touch, with a halo so it shows on any line. */
+export function drawCursorDot(ctx: CanvasRenderingContext2D, p: Vec, color: string, halo: string): void {
   ctx.save();
-  ctx.lineWidth = 1.5;
+  ctx.fillStyle = halo;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 3.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 2.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Snap marker; `faint` for points nearby that are not (yet) caught. */
+export function drawSnapMarker(ctx: CanvasRenderingContext2D, p: Vec, kind: SnapKind, faint = false): void {
+  const r = faint ? 4 : 6;
+  ctx.save();
+  if (faint) ctx.globalAlpha = 0.45;
+  ctx.lineWidth = faint ? 1 : 1.5;
   ctx.strokeStyle = ACCENT;
   ctx.fillStyle = ACCENT_SOFT;
   ctx.beginPath();

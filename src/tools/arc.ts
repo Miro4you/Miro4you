@@ -1,7 +1,7 @@
 import type { App } from '../app';
-import { arcEnds, arcPoint, geomPoly, TAU } from '../core/curves';
-import { dist, normAngle, type Vec } from '../core/geom';
-import type { SnapHit } from '../core/snap';
+import { arcEnds, arcOffset, arcPoint, geomPoly, TAU } from '../core/curves';
+import { dist, distToSegment, normAngle, type Vec } from '../core/geom';
+import { snapAngle, softSnapAngle, type SnapHit } from '../core/snap';
 import type { ArcEntity, CircleEntity, Entity, LineEntity } from '../core/types';
 import { ACCENT, drawGuideLine, drawPill, drawSnapMarker, formatLength } from '../render/overlay';
 import type { Tool, ToolEvent } from './tool';
@@ -14,8 +14,13 @@ type ArcGeom = { c: Vec; r: number; start: number; sweep: number };
 
 type State =
   | { k: 'idle' }
-  /** Tangential: continues the path ending at p0 in direction t. */
-  | { k: 'tan'; p0: Vec; t: Vec; p: Vec; hit: SnapHit | null; arc: ArcGeom | null }
+  /**
+   * Pressed at p0, start direction not decided yet: it follows the way the pen
+   * leaves p0 – along one of the curves through p0 (`axes`), or freely.
+   */
+  | { k: 'tan0'; p0: Vec; hit: SnapHit | null; axes: Vec[]; p: Vec }
+  /** Tangential: leaves p0 in direction t and bends towards the pen. */
+  | { k: 'tan'; p0: Vec; hit0: SnapHit | null; axes: Vec[]; t: Vec; p: Vec; hit: SnapHit | null; arc: ArcGeom | null }
   /** Centre mode, step 1: centre placed, dragging out radius and start point. */
   | { k: 'c1'; c: Vec; cHit: SnapHit | null; p: Vec; pHit: SnapHit | null }
   /** Centre mode, step 2: choose the end angle (hover or press and drag, lift to finish). */
@@ -46,51 +51,81 @@ export function tangentArc(p0: Vec, t: Vec, p: Vec): ArcGeom | null {
   return { c, r: Math.abs(rs), start, sweep };
 }
 
-/** Direction in which a path ending at p would continue, if some line or arc ends there. */
-function tangentAt(app: App, p: Vec): Vec | null {
-  let best: { t: Vec; z: number } | null = null;
-  const eps = 1e-6;
-  const consider = (t: Vec, e: Entity) => {
-    const l = Math.hypot(t.x, t.y);
+/** Distance (CSS px) the pen must move away from the start before the start direction is fixed. */
+const LOCK_PX = 9;
+
+/**
+ * Tangent directions (unit vectors, either sense) of the lines, arcs, circles and
+ * freehand strokes passing through p – the directions an arc starting at p can
+ * continue in. Higher entities first.
+ */
+export function tangentAxes(entities: Iterable<Entity>, p: Vec, eps = 1e-5): Vec[] {
+  const found: { t: Vec; z: number }[] = [];
+  const add = (x: number, y: number, z: number) => {
+    const l = Math.hypot(x, y);
     if (l < 1e-12) return;
-    if (!best || e.z > best.z) best = { t: { x: t.x / l, y: t.y / l }, z: e.z };
+    const t = { x: x / l, y: y / l };
+    // Skip directions already present (e.g. two collinear lines meeting).
+    if (found.some((f) => Math.abs(f.t.x * t.y - f.t.y * t.x) < 1e-6)) return;
+    found.push({ t, z });
   };
-  for (const e of app.doc.visibleEntities()) {
+  for (const e of entities) {
     if (e.kind === 'line') {
-      if (dist(e.a, p) < eps) consider({ x: e.a.x - e.b.x, y: e.a.y - e.b.y }, e);
-      else if (dist(e.b, p) < eps) consider({ x: e.b.x - e.a.x, y: e.b.y - e.a.y }, e);
-    } else if (e.kind === 'arc') {
-      const [p0, p1] = arcEnds(e);
-      const sign = Math.sign(e.sweep || 1);
-      if (dist(p0, p) < eps) {
-        const a = e.start;
-        consider({ x: sign * Math.sin(a), y: -sign * Math.cos(a) }, e);
-      } else if (dist(p1, p) < eps) {
-        const a = e.start + e.sweep;
-        consider({ x: -sign * Math.sin(a), y: sign * Math.cos(a) }, e);
-      }
+      if (distToSegment(p, e.a, e.b) <= eps) add(e.b.x - e.a.x, e.b.y - e.a.y, e.z);
+    } else if (e.kind === 'circle' || e.kind === 'arc') {
+      if (Math.abs(dist(p, e.c) - e.r) > eps) continue;
+      const a = Math.atan2(p.y - e.c.y, p.x - e.c.x);
+      if (e.kind === 'arc' && arcOffset(e.start, e.sweep, a) > Math.abs(e.sweep) + eps / e.r) continue;
+      add(-Math.sin(a), Math.cos(a), e.z);
     } else if (e.kind === 'stroke') {
       const poly = geomPoly(e);
-      const n = poly.s.length;
-      if (dist({ x: poly.pts[0], y: poly.pts[1] }, p) < 1e-3) {
-        consider({ x: poly.pts[0] - poly.pts[2], y: poly.pts[1] - poly.pts[3] }, e);
-      } else if (dist({ x: poly.pts[(n - 1) * 2], y: poly.pts[(n - 1) * 2 + 1] }, p) < 1e-3) {
-        consider({ x: poly.pts[(n - 1) * 2] - poly.pts[(n - 2) * 2], y: poly.pts[(n - 1) * 2 + 1] - poly.pts[(n - 2) * 2 + 1] }, e);
+      for (let j = 0; j < poly.s.length - 1; j++) {
+        const q0 = { x: poly.pts[j * 2], y: poly.pts[j * 2 + 1] };
+        const q1 = { x: poly.pts[j * 2 + 2], y: poly.pts[j * 2 + 3] };
+        if (distToSegment(p, q0, q1) <= Math.max(eps, 1e-3)) {
+          add(q1.x - q0.x, q1.y - q0.y, e.z);
+          break;
+        }
       }
     }
   }
-  return best ? (best as { t: Vec }).t : null;
+  return found.sort((a, b) => b.z - a.z).map((f) => f.t);
 }
 
 /**
- * Arc tool. Starting on the end of a line or arc gives a tangential arc (a rounded
- * corner): drag to where it should end and lift. Anywhere else – or always, in
- * centre mode – the first drag sets centre and radius, the second the end angle.
+ * Start direction for an arc leaving p0 towards `toward`: the curve direction
+ * through p0 that best matches (in the sense of the movement), else the movement
+ * itself.
+ */
+export function startDirection(axes: Vec[], p0: Vec, toward: Vec): Vec {
+  const dx = toward.x - p0.x;
+  const dy = toward.y - p0.y;
+  const l = Math.hypot(dx, dy) || 1;
+  const d = { x: dx / l, y: dy / l };
+  let best: Vec | null = null;
+  let bd = -1;
+  for (const t of axes) {
+    const c = d.x * t.x + d.y * t.y;
+    if (Math.abs(c) > bd + 1e-9) {
+      bd = Math.abs(c);
+      best = c >= 0 ? t : { x: -t.x, y: -t.y };
+    }
+  }
+  return best ?? d;
+}
+
+/**
+ * Arc tool. Press where the arc starts and move off in the direction it should
+ * leave: on a line, arc or circle (its end, middle or anywhere on it) the arc
+ * starts tangentially along it – forwards or backwards, whichever way the pen
+ * goes – otherwise it starts in the direction of the first movement. Then drag
+ * to where the arc should end and lift. Going back to the start lets the
+ * direction be chosen again. In centre mode the first drag sets centre and
+ * radius, the second the end angle.
  */
 export class ArcTool implements Tool {
   readonly id = 'arc';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
 
   constructor(private app: App) {}
 
@@ -98,12 +133,15 @@ export class ArcTool implements Tool {
     return this.state.k !== 'idle';
   }
 
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
+  }
+
   private preview(g: ArcGeom): ArcEntity {
     return { kind: 'arc', id: 'preview', layerId: '', z: 0, style: this.app.style, ...g };
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     const st = this.state;
     if (st.k === 'c2') {
       st.pressed = true;
@@ -112,21 +150,48 @@ export class ArcTool implements Tool {
     }
     if (!this.app.ensureDrawableLayer()) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
-    if (this.app.settings.arcMode === 'auto' && s.hit?.kind === 'end') {
-      const t = tangentAt(this.app, s.p);
-      if (t) {
-        this.state = { k: 'tan', p0: s.p, t, p: s.p, hit: null, arc: null };
-        this.app.requestOverlay();
-        return;
-      }
+    if (this.app.settings.arcMode === 'auto') {
+      const axes = s.hit ? tangentAxes(this.app.doc.visibleEntities(), s.p) : [];
+      this.state = { k: 'tan0', p0: s.p, hit: s.hit, axes, p: s.p };
+      this.app.requestOverlay();
+      return;
     }
     this.state = { k: 'c1', c: s.p, cHit: s.hit, p: s.p, pHit: null };
     this.app.requestOverlay();
   }
 
+  /** Direction for a free start (no curve under it), snapped like line angles. */
+  private freeDirection(p0: Vec, q: Vec): Vec {
+    let target = q;
+    if (!this.app.snapSuspended) {
+      if (this.app.settings.angleMode === 'snap') target = snapAngle(p0, q, this.app.settings.angleStep);
+      else target = softSnapAngle(p0, q, 3);
+    }
+    const l = dist(p0, target) || 1;
+    return { x: (target.x - p0.x) / l, y: (target.y - p0.y) / l };
+  }
+
+  /** Fix the start direction once the pen has left p0, or release it when it comes back. */
+  private updateStart(ev: ToolEvent): void {
+    const st = this.state;
+    if (st.k !== 'tan0' && st.k !== 'tan') return;
+    const away = dist(this.app.cam.toScreen(st.p0), ev.screen);
+    if (away < LOCK_PX) {
+      this.state = { k: 'tan0', p0: st.p0, hit: st.k === 'tan0' ? st.hit : st.hit0, axes: st.axes, p: ev.world };
+      this.app.requestOverlay();
+      return;
+    }
+    if (st.k === 'tan0') {
+      const t = st.axes.length ? startDirection(st.axes, st.p0, ev.world) : this.freeDirection(st.p0, ev.world);
+      this.state = { k: 'tan', p0: st.p0, hit0: st.hit, axes: st.axes, t, p: ev.world, hit: null, arc: null };
+    }
+    const cur = this.state;
+    if (cur.k === 'tan') this.updateTangent(cur, ev);
+  }
+
   move(ev: ToolEvent): void {
     const st = this.state;
-    if (st.k === 'tan') this.updateTangent(st, ev);
+    if (st.k === 'tan0' || st.k === 'tan') this.updateStart(ev);
     else if (st.k === 'c1') {
       const s = this.app.snapPoint(ev.world, ev.pointerType);
       const onCentre = s.hit && dist(s.hit.p, st.c) < 1e-9;
@@ -137,9 +202,12 @@ export class ArcTool implements Tool {
   }
 
   up(ev: ToolEvent): void {
+    if (this.state.k === 'tan0' || this.state.k === 'tan') this.updateStart(ev);
     const st = this.state;
-    if (st.k === 'tan') {
-      this.updateTangent(st, ev);
+    if (st.k === 'tan0') {
+      this.state = { k: 'idle' };
+      this.app.toast('Bogen: am Startpunkt in die Startrichtung losziehen, dann zum Endpunkt');
+    } else if (st.k === 'tan') {
       this.state = { k: 'idle' };
       if (st.arc) this.commit(st.arc);
       else if (dist(this.app.cam.toScreen(st.p0), this.app.cam.toScreen(st.p)) >= MIN_R_PX) {
@@ -236,19 +304,11 @@ export class ArcTool implements Tool {
     const st = this.state;
     if (st.k === 'c2') {
       if (ev) this.updateSweep(st, ev);
-      return;
-    }
-    if (st.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
     }
   }
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -271,7 +331,28 @@ export class ArcTool implements Tool {
       const p = cam.toScreen(c);
       drawPill(ctx, { x: p.x, y: p.y - r * cam.scale - 26 }, text);
     };
-    if (st.k === 'tan') {
+    if (st.k === 'tan0') {
+      // Possible start directions: short dashed guides along the curves through p0.
+      const p0 = cam.toScreen(st.p0);
+      ctx.save();
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      for (const t of st.axes) {
+        const q = cam.toScreen({ x: st.p0.x + t.x, y: st.p0.y + t.y });
+        const l = Math.hypot(q.x - p0.x, q.y - p0.y) || 1;
+        const ux = ((q.x - p0.x) / l) * 34;
+        const uy = ((q.y - p0.y) / l) * 34;
+        ctx.moveTo(p0.x - ux, p0.y - uy);
+        ctx.lineTo(p0.x + ux, p0.y + uy);
+      }
+      ctx.stroke();
+      ctx.restore();
+      if (st.hit) drawSnapMarker(ctx, p0, st.hit.kind);
+      else drawGuideLine(ctx, p0, p0);
+    } else if (st.k === 'tan') {
       const p0 = cam.toScreen(st.p0);
       if (st.arc) {
         this.app.paintGuide(this.preview(st.arc));
@@ -281,7 +362,7 @@ export class ArcTool implements Tool {
       } else {
         drawGuideLine(ctx, p0, cam.toScreen(st.p));
       }
-      drawSnapMarker(ctx, p0, 'end');
+      if (st.hit0) drawSnapMarker(ctx, p0, st.hit0.kind);
       if (st.hit) drawSnapMarker(ctx, cam.toScreen(st.hit.p), st.hit.kind);
     } else if (st.k === 'c1') {
       const r = dist(st.c, st.p);
@@ -305,8 +386,6 @@ export class ArcTool implements Tool {
       radiusLine(st.c, arcPoint(st.c, st.r, st.a0));
       label(st.c, st.r, this.app.arcText(st.r, sweep));
       if (st.hit) drawSnapMarker(ctx, cam.toScreen(st.hit.p), st.hit.kind);
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

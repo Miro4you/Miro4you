@@ -20,12 +20,15 @@ type State = { k: 'idle' } | { k: 'draw'; c: Vec; cHit: SnapHit | null; p: Vec }
 export class CrossTool implements Tool {
   readonly id = 'cross';
   private state: State = { k: 'idle' };
-  private hoverHit: SnapHit | null = null;
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k !== 'idle';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   /** The two lines of the cross for centre c and arm end p. */
@@ -49,7 +52,6 @@ export class CrossTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     if (!this.app.ensureDrawableLayer()) return;
     const s = this.app.snapPoint(ev.world, ev.pointerType);
     this.state = { k: 'draw', c: s.p, cHit: s.hit, p: s.p };
@@ -84,18 +86,10 @@ export class CrossTool implements Tool {
     this.app.requestOverlay();
   }
 
-  hover(ev: ToolEvent | null): void {
-    if (this.state.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
-    }
-  }
+  hover(): void {}
 
   reset(): void {
     this.cancel();
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -106,8 +100,6 @@ export class CrossTool implements Tool {
       for (const l of this.lines(st.c, p)) this.app.paintWorld(l);
       if (st.cHit) drawSnapMarker(ctx, cam.toScreen(st.c), st.cHit.kind);
       drawMeasureLabel(ctx, cam.toScreen(st.c), cam.toScreen(p), this.app.measureText(st.c, p));
-    } else if (this.hoverHit) {
-      drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
     }
   }
 }

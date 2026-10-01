@@ -24,12 +24,15 @@ export class LineTool implements Tool {
   readonly id = 'line';
   private state: State = { k: 'idle' };
   private handleId: string | null = null;
-  private hoverHit: SnapHit | null = null;
 
   constructor(private app: App) {}
 
   get busy(): boolean {
     return this.state.k !== 'idle';
+  }
+
+  get hoverSnap(): boolean {
+    return this.state.k === 'idle';
   }
 
   /** The last drawn line, if its correction knobs should show. */
@@ -41,7 +44,6 @@ export class LineTool implements Tool {
   }
 
   down(ev: ToolEvent): void {
-    this.hoverHit = null;
     const line = this.handleLine();
     if (line) {
       const g = hitGrip(this.app, gripsFor(this.app, line, 'knobs'), ev.screen, this.app.handleHitRadius(ev.pointerType));
@@ -97,19 +99,11 @@ export class LineTool implements Tool {
     this.app.requestOverlay();
   }
 
-  hover(ev: ToolEvent | null): void {
-    if (this.state.k !== 'idle') return;
-    const hit = ev ? this.app.snapPoint(ev.world, ev.pointerType).hit : null;
-    if (hit?.p.x !== this.hoverHit?.p.x || hit?.p.y !== this.hoverHit?.p.y) {
-      this.hoverHit = hit;
-      this.app.requestOverlay();
-    }
-  }
+  hover(): void {}
 
   reset(): void {
     this.cancel();
     this.handleId = null;
-    this.hoverHit = null;
   }
 
   overlay(ctx: CanvasRenderingContext2D): void {
@@ -136,6 +130,5 @@ export class LineTool implements Tool {
       if (st.k === 'grip') st.drag.overlay(ctx);
       drawGrips(this.app, ctx, grips, 'knobs', st.k === 'grip' ? st.drag.grip.key : undefined);
     }
-    if (st.k === 'idle' && this.hoverHit) drawSnapMarker(ctx, cam.toScreen(this.hoverHit.p), this.hoverHit.kind);
   }
 }

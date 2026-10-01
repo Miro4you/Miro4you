@@ -130,7 +130,11 @@ export class InputController {
       this.moveDraw(e);
       return;
     }
-    if (!this.draw && e.buttons === 0) this.app.tool.hover(this.toolEvent(e, type));
+    if (!this.draw && e.buttons === 0) {
+      const ev = this.toolEvent(e, type);
+      this.app.setHover(ev.screen, type);
+      this.app.tool.hover(ev);
+    }
   };
 
   private onUp = (e: PointerEvent): void => {
@@ -165,7 +169,10 @@ export class InputController {
   };
 
   private onLeave = (e: PointerEvent): void => {
-    if (!this.draw && this.kind(e) !== 'touch') this.app.tool.hover(null);
+    if (!this.draw && this.kind(e) !== 'touch') {
+      this.app.setHover(null);
+      this.app.tool.hover(null);
+    }
   };
 
   private capture(e: PointerEvent): void {
@@ -185,6 +192,7 @@ export class InputController {
     }
     this.capture(e);
     const ev = this.toolEvent(e, type);
+    this.app.setHover(null);
     this.draw = { id: e.pointerId, type, last: ev };
     this.updateSuspension();
     this.app.tool.down(ev);

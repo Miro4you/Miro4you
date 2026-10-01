@@ -28,6 +28,12 @@ export interface SnapOptions {
 const PRIORITY: Record<SnapKind, number> = { end: 0, cen: 0.5, int: 1, quad: 1.5, mid: 2, on: 3 };
 
 /**
+ * Midpoints catch from further along the curve than other points (the pointer
+ * still has to be on the curve), so the middle of a line is easy to hit.
+ */
+export const MID_REACH = 1.8;
+
+/**
  * Find the best snap point within `radius` (world units) of `p`.
  * Endpoints beat centres beat intersections beat quadrants and midpoints,
  * unless another kind is clearly closer.
@@ -35,9 +41,9 @@ const PRIORITY: Record<SnapKind, number> = { end: 0, cen: 0.5, int: 1, quad: 1.5
 export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: SnapOptions): SnapHit | null {
   let best: SnapHit | null = null;
   let bestScore = Infinity;
-  const consider = (q: Vec, kind: SnapKind) => {
+  const consider = (q: Vec, kind: SnapKind, reach = 1) => {
     const d = dist(p, q);
-    if (d > radius) return;
+    if (d > radius * reach) return;
     // Bias by kind: a lower-priority candidate must be noticeably closer to win.
     const score = d + PRIORITY[kind] * radius * 0.25;
     if (score < bestScore) {
@@ -55,13 +61,17 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
     // Centres may lie far from the drawn curve, so test them before culling.
     if ((e.kind === 'circle' || e.kind === 'arc') && centres) consider(e.c, 'cen');
     if (!boxContainsPoint(box, p, radius)) continue;
+    // Pointer close to the curve itself (also gives midpoints their longer reach).
+    const curve = e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc';
+    const pr = curve ? project(e, p) : null;
+    const onIt = !!pr && pr.d <= radius;
     switch (e.kind) {
       case 'line':
         if (opts.end) {
           consider(e.a, 'end');
           consider(e.b, 'end');
         }
-        if (opts.mid) consider(mid(e.a, e.b), 'mid');
+        if (opts.mid) consider(mid(e.a, e.b), 'mid', onIt ? MID_REACH : 1);
         break;
       case 'stroke':
         if (opts.end) {
@@ -79,17 +89,14 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
           consider(a, 'end');
           consider(b, 'end');
         }
-        if (opts.mid) consider(arcPoint(e.c, e.r, e.start + e.sweep / 2), 'mid');
+        if (opts.mid) consider(arcPoint(e.c, e.r, e.start + e.sweep / 2), 'mid', onIt ? MID_REACH : 1);
         break;
       }
     }
     // Curves passing close to the pointer: candidates for intersections and for "on the curve".
-    if (e.kind === 'line' || e.kind === 'circle' || e.kind === 'arc') {
-      const pr = project(e, p);
-      if (pr.d <= radius) {
-        if (opts.int) near.push(e);
-        if (opts.on) onCurve.push(pr.point);
-      }
+    if (pr && onIt) {
+      if (opts.int) near.push(e);
+      if (opts.on) onCurve.push(pr.point);
     }
   }
 
@@ -103,6 +110,46 @@ export function findSnap(doc: SketchDocument, p: Vec, radius: number, opts: Snap
     }
   }
   return best;
+}
+
+/**
+ * Snap points near `p` (ends, midpoints, centres, quadrant points) for showing
+ * where the pointer could catch – without intersections, which need pairs.
+ */
+export function snapCandidates(doc: SketchDocument, p: Vec, radius: number, exclude?: ReadonlySet<string>): SnapHit[] {
+  const out: SnapHit[] = [];
+  const add = (q: Vec, kind: SnapKind) => {
+    if (dist(p, q) <= radius) out.push({ p: q, kind });
+  };
+  for (const e of doc.visibleEntities()) {
+    if (exclude?.has(e.id)) continue;
+    if (e.kind === 'circle' || e.kind === 'arc') add(e.c, 'cen');
+    if (!boxContainsPoint(entityBox(e), p, radius)) continue;
+    switch (e.kind) {
+      case 'line':
+        add(e.a, 'end');
+        add(e.b, 'end');
+        add(mid(e.a, e.b), 'mid');
+        break;
+      case 'stroke': {
+        const n = e.pts.length;
+        add({ x: e.pts[0], y: e.pts[1] }, 'end');
+        add({ x: e.pts[n - 2], y: e.pts[n - 1] }, 'end');
+        break;
+      }
+      case 'circle':
+        for (let k = 0; k < 4; k++) add(arcPoint(e.c, e.r, (k * Math.PI) / 2), 'quad');
+        break;
+      case 'arc': {
+        const [a, b] = arcEnds(e);
+        add(a, 'end');
+        add(b, 'end');
+        add(arcPoint(e.c, e.r, e.start + e.sweep / 2), 'mid');
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 export type AngleMode = 'snap' | 'show' | 'off';

@@ -2,11 +2,11 @@ import { Camera } from './core/camera';
 import { intersectSegment, project } from './core/curves';
 import { entityBox, newId, SketchDocument } from './core/document';
 import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from './core/geom';
-import { DEFAULT_STYLE, PAPER_COLORS, setPenTheme, type Theme } from './core/pens';
-import { findSnap, snapAngle, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
+import { DEFAULT_STYLE, PAPER_COLORS, penColor, setPenTheme, type Theme } from './core/pens';
+import { findSnap, snapAngle, snapCandidates, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import { mirrorGroup, transformEntity, type Affine } from './core/transform';
 import { isAnnotation, type Entity, type HatchPattern, type LineEntity, type Style } from './core/types';
-import { ACCENT, drawMirrorToggle, formatAngle, formatLength } from './render/overlay';
+import { ACCENT, drawCursorDot, drawMirrorToggle, drawSnapMarker, formatAngle, formatLength } from './render/overlay';
 import { Painter } from './render/painter';
 import { SceneRenderer } from './render/scene';
 import { idbGet, idbSet, loadPref, savePref } from './storage/idb';
@@ -86,6 +86,8 @@ const HANDLE_PX: Record<PointerKind, number> = { pen: 16, mouse: 12, touch: 24 }
 /** How close (CSS px) the pointer must be to pick an entity. */
 const HIT_PX: Record<PointerKind, number> = { pen: 10, mouse: 8, touch: 16 };
 const AUTOSAVE_KEY = 'current';
+/** Snap points within this many snap radii are shown (faintly) under a hovering pen. */
+const HOVER_CANDIDATES = 4;
 
 const DEFAULT_SETTINGS: Settings = {
   grid: true,
@@ -134,6 +136,8 @@ export class App {
   selection = new Set<string>();
   /** Set by the input controller (Alt key / finger held while drawing with the pen). */
   snapSuspended = false;
+  /** Pen or mouse hovering over the canvas without contact (screen CSS px). */
+  private hoverAt: { screen: Vec; type: PointerKind } | null = null;
 
   width = 0;
   height = 0;
@@ -735,7 +739,37 @@ export class App {
       ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
       this.drawAxes(ctx);
       this.tool.overlay(ctx);
+      this.drawHover(ctx);
     }
+  }
+
+  /** Pointer hovering without contact (null when it leaves or touches down). */
+  setHover(screen: Vec | null, type: PointerKind = 'pen'): void {
+    const prev = this.hoverAt;
+    this.hoverAt = screen ? { screen, type } : null;
+    if (prev || screen) this.requestOverlay();
+  }
+
+  /**
+   * Under a hovering pen: a small cursor dot, the snap points nearby (faint) and
+   * the one a press would catch (bold) – the same snap the tool then uses.
+   */
+  private drawHover(ctx: CanvasRenderingContext2D): void {
+    const h = this.hoverAt;
+    const tool = this.tool;
+    if (!h || tool.busy) return;
+    if (tool.hoverSnap && this.settings.snap && !this.snapSuspended) {
+      const world = this.cam.toWorld(h.screen);
+      const hit = this.snapPoint(world, h.type).hit;
+      const r = this.snapRadius(h.type);
+      for (const c of snapCandidates(this.doc, world, r * HOVER_CANDIDATES)) {
+        if (hit && dist(c.p, hit.p) < 1e-9) continue;
+        drawSnapMarker(ctx, this.cam.toScreen(c.p), c.kind, true);
+      }
+      if (hit) drawSnapMarker(ctx, this.cam.toScreen(hit.p), hit.kind);
+    }
+    // The mouse has its own cursor; the Pencil gets a dot showing where it would touch.
+    if (h.type === 'pen' && tool.id !== 'erase') drawCursorDot(ctx, h.screen, penColor(this.style), PAPER_COLORS[this.theme]);
   }
 
   private worldPainter(): Painter {
