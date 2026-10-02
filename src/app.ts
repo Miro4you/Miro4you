@@ -1,7 +1,7 @@
 import { Camera } from './core/camera';
 import { intersectSegment, project } from './core/curves';
-import { entityBox, newId, SketchDocument } from './core/document';
-import { boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Vec } from './core/geom';
+import { entityBox, newId, SketchDocument, type Change } from './core/document';
+import { boxExpand, boxesIntersect, boxUnion, drawingAngleDeg, dist, emptyBox, isEmptyBox, type Box, type Vec } from './core/geom';
 import { DEFAULT_STYLE, PAPER_COLORS, penColor, setPenTheme, type Theme } from './core/pens';
 import { findSnap, snapAngle, snapCandidates, softSnapAngle, type AngleMode, type SnapHit } from './core/snap';
 import { mirrorGroup, transformEntity, type Affine } from './core/transform';
@@ -22,7 +22,7 @@ import { TextTool } from './tools/text';
 import { TraceTool } from './tools/trace';
 import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
-import { HATCH_GAPS, HatchTool } from './tools/hatch';
+import { HATCH_GAPS, HatchTool, isBoundary, refitHatch } from './tools/hatch';
 import { LineTool } from './tools/line';
 import { SelectTool } from './tools/select';
 import type { PointerKind, Tool } from './tools/tool';
@@ -197,6 +197,7 @@ export class App {
       trace: new TraceTool(this),
       text: new TextTool(this),
     };
+    this.doc.beforeCommit = (changes) => this.refitHatches(changes);
     // Gap tolerances that are no longer offered fall back to the smallest one.
     if (!(HATCH_GAPS as readonly number[]).includes(this.settings.hatchGap)) this.settings.hatchGap = HATCH_GAPS[0];
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
@@ -450,6 +451,28 @@ export class App {
   /** Mirrored copies of an entity; previews get stable ids so their look doesn't flicker. */
   mirrorCopies<T extends Entity>(e: T, preview = false): T[] {
     return this.mirrors().map((m, i) => transformEntity(e, m, preview ? `${e.id}~${i}` : newId('M')));
+  }
+
+  /**
+   * Hatches follow their outlines: after a step that changed boundary lines near a
+   * hatch, its area is found again (same undo step).
+   */
+  private refitHatches(changes: readonly Change[]): void {
+    const boxes: Box[] = [];
+    for (const c of changes) {
+      const es = c.t === 'upd' ? [c.before, c.after] : c.t === 'add' || c.t === 'del' ? [c.e] : [];
+      for (const e of es) if (isBoundary(e)) boxes.push(entityBox(e));
+    }
+    if (!boxes.length) return;
+    for (const h of [...this.doc.all()]) {
+      if (h.kind !== 'hatch') continue;
+      const l = this.doc.layer(h.layerId);
+      if (!l?.visible) continue;
+      const hb = boxExpand(entityBox(h), 2);
+      if (!boxes.some((b) => boxesIntersect(b, hb))) continue;
+      const loops = refitHatch(() => this.doc.visibleEntities(), h, h.gap ?? this.settings.hatchGap);
+      if (loops && JSON.stringify(loops) !== JSON.stringify(h.loops)) this.doc.update({ ...h, loops });
+    }
   }
 
   /** Add new entities together with their mirrored copies as one undo step. */

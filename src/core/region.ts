@@ -123,3 +123,44 @@ export function loopArea(loop: number[]): number {
   for (let i = 0, j = n - 1; i < n; j = i++) a += (loop[j * 2] - loop[i * 2]) * (loop[j * 2 + 1] + loop[i * 2 + 1]);
   return a / 2;
 }
+
+export interface Components {
+  /** Component index per pixel (0 = barrier). */
+  labels: Int32Array;
+  /** Pixel count per component (index 0 unused). */
+  size: number[];
+  /** Whether a component reaches the raster border (the area is open there). */
+  border: boolean[];
+}
+
+/** 4-connected components of the non-barrier pixels. */
+export function labelComponents(barrier: Uint8Array, w: number, h: number): Components {
+  const labels = new Int32Array(w * h);
+  const size = [0];
+  const border = [false];
+  const stack = new Int32Array(w * h);
+  let n = 0;
+  for (let start = 0; start < w * h; start++) {
+    if (barrier[start] || labels[start]) continue;
+    n++;
+    let count = 0;
+    let edge = false;
+    let top = 0;
+    stack[top++] = start;
+    labels[start] = n;
+    while (top > 0) {
+      const i = stack[--top];
+      count++;
+      const x = i % w;
+      const y = (i - x) / w;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) edge = true;
+      if (x > 0 && !barrier[i - 1] && !labels[i - 1]) (labels[i - 1] = n), (stack[top++] = i - 1);
+      if (x < w - 1 && !barrier[i + 1] && !labels[i + 1]) (labels[i + 1] = n), (stack[top++] = i + 1);
+      if (y > 0 && !barrier[i - w] && !labels[i - w]) (labels[i - w] = n), (stack[top++] = i - w);
+      if (y < h - 1 && !barrier[i + w] && !labels[i + w]) (labels[i + w] = n), (stack[top++] = i + w);
+    }
+    size.push(count);
+    border.push(edge);
+  }
+  return { labels, size, border };
+}

@@ -2,7 +2,7 @@ import type { App } from '../app';
 import { geomBox, insideHatch, project } from '../core/curves';
 import { boxesIntersect, boxExpand, emptyBox, boxAddPoint, simplifyFlat, type Box, type Vec } from '../core/geom';
 import { INK_WIDTHS, PENCIL_WIDTHS } from '../core/pens';
-import { dilate, floodFill, traceLoops } from '../core/region';
+import { dilate, floodFill, labelComponents, traceLoops } from '../core/region';
 import { isAnnotation, type Entity, type HatchEntity } from '../core/types';
 import { traceEntity } from '../render/paths';
 import type { Tool, ToolEvent } from './tool';
@@ -14,7 +14,7 @@ export const HATCH_GAPS = [0.5, 1] as const;
 const MAX_RASTER = 2400;
 
 /** Lines that bound areas: everything except annotations and centre/axis lines. */
-function isBoundary(e: Entity): boolean {
+export function isBoundary(e: Entity): boolean {
   if (isAnnotation(e)) return false;
   if (e.kind === 'line' && e.axis) return false;
   return e.style.lineType !== 'dashdot' && e.style.lineType !== 'dashdotdot';
@@ -22,34 +22,58 @@ function isBoundary(e: Entity): boolean {
 
 export type RegionResult = { ok: true; loops: number[][] } | { ok: false; reason: 'onLine' | 'open' };
 
-/**
- * The closed area around a world point, found on a raster of the current view:
- * boundary lines are drawn thickened by the gap tolerance (so gaps up to `gap` mm
- * close), the free space around the point is flood-filled, grown back to the line
- * centres, traced and snapped onto the nearby lines.
- */
-export function findRegion(app: App, world: Vec, gap: number): RegionResult {
-  const cam = app.cam;
-  const k = Math.min(1, MAX_RASTER / Math.max(app.width, app.height, 1));
-  const w = Math.max(8, Math.ceil(app.width * k));
-  const h = Math.max(8, Math.ceil(app.height * k));
+/** A raster over part of the world: world → raster px is the affine `m`. */
+interface Frame {
+  w: number;
+  h: number;
+  m: [number, number, number, number, number, number];
+  pxPerMm: number;
+  /** World area covered (for culling). */
+  view: Box;
+}
+
+function toWorld(f: Frame, x: number, y: number): Vec {
+  const [a, b, c, d, e, g] = f.m;
+  const det = a * d - b * c;
+  const px = x - e;
+  const py = y - g;
+  return { x: (d * px - c * py) / det, y: (-b * px + a * py) / det };
+}
+
+function toRaster(f: Frame, p: Vec): Vec {
+  const [a, b, c, d, e, g] = f.m;
+  return { x: a * p.x + c * p.y + e, y: b * p.x + d * p.y + g };
+}
+
+/** Axis-aligned frame over a world box, with at most about `maxPx` pixels. */
+function boxFrame(box: Box, maxPx = 1_500_000): Frame {
+  const bw = Math.max(box.maxX - box.minX, 1);
+  const bh = Math.max(box.maxY - box.minY, 1);
+  const k = Math.min(16, Math.max(2, Math.sqrt(maxPx / (bw * bh))));
+  return { w: Math.ceil(bw * k), h: Math.ceil(bh * k), m: [k, 0, 0, k, -box.minX * k, -box.minY * k], pxPerMm: k, view: box };
+}
+
+function newContext(w: number, h: number): CanvasRenderingContext2D | null {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) return { ok: false, reason: 'open' };
-  const [a, b, c, d, e, f] = cam.matrix();
-  ctx.setTransform(a * k, b * k, c * k, d * k, e * k, f * k);
-  const pxPerMm = cam.scale * k;
-  const view = boxExpand(cam.visibleBox(app.width, app.height), gap);
-  const bounds: Entity[] = [];
+  return canvas.getContext('2d', { willReadFrequently: true });
+}
+
+/** Boundary lines drawn thickened by the gap tolerance (so gaps up to `gap` close). */
+function rasterize(entities: Iterable<Entity>, f: Frame, gap: number): { barrier: Uint8Array; bounds: Entity[]; maxHalf: number } | null {
+  const ctx = newContext(f.w, f.h);
+  if (!ctx) return null;
+  ctx.setTransform(...f.m);
   ctx.strokeStyle = '#000';
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   // At least 2 raster px so a line never leaks diagonally.
-  const minW = 2 / pxPerMm;
+  const minW = 2 / f.pxPerMm;
+  const view = boxExpand(f.view, gap);
+  const bounds: Entity[] = [];
   let maxHalf = 0;
-  for (const ent of app.doc.visibleEntities()) {
+  for (const ent of entities) {
     if (!isBoundary(ent) || !boxesIntersect(geomBox(ent), view)) continue;
     bounds.push(ent);
     const lw = Math.max(ent.style.width + gap, minW);
@@ -59,29 +83,28 @@ export function findRegion(app: App, world: Vec, gap: number): RegionResult {
     traceEntity(ctx, ent);
     ctx.stroke();
   }
-  const img = ctx.getImageData(0, 0, w, h).data;
-  const barrier = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) barrier[i] = img[i * 4 + 3] > 96 ? 1 : 0;
+  const img = ctx.getImageData(0, 0, f.w, f.h).data;
+  const barrier = new Uint8Array(f.w * f.h);
+  for (let i = 0; i < f.w * f.h; i++) barrier[i] = img[i * 4 + 3] > 96 ? 1 : 0;
+  return { barrier, bounds, maxHalf };
+}
 
-  const s = cam.toScreen(world);
-  const fill = floodFill(barrier, w, h, Math.floor(s.x * k), Math.floor(s.y * k));
-  if (!fill.ok) return fill;
-  // Grow back to about the line centres (the barrier half width minus a little).
-  const grow = Math.max(0, Math.round((gap / 2 + 0.1) * pxPerMm));
-  const area = dilate(fill.filled, w, h, grow);
-  const raw = traceLoops(area, w, h, 0);
-
-  const snapTol = 2.5 / pxPerMm + 0.05;
+/** Filled raster area → world loops, grown back to the line centres and snapped onto the lines. */
+function vectorize(filled: Uint8Array, f: Frame, bounds: Entity[], gap: number, maxHalf: number): number[][] {
+  const grow = Math.max(0, Math.round((gap / 2 + 0.1) * f.pxPerMm));
+  const area = dilate(filled, f.w, f.h, grow);
+  const raw = traceLoops(area, f.w, f.h, 0);
+  const snapTol = 2.5 / f.pxPerMm + 0.05;
   const loops: number[][] = [];
   for (const loop of raw) {
     let lb: Box = emptyBox();
     const pts: number[] = [];
     for (let i = 0; i < loop.length; i += 2) {
-      const p = cam.toWorld({ x: loop[i] / k, y: loop[i + 1] / k });
+      const p = toWorld(f, loop[i], loop[i + 1]);
       pts.push(p.x, p.y);
       lb = boxAddPoint(lb, p.x, p.y);
     }
-    const near = bounds.filter((ent) => boxesIntersect(boxExpand(geomBox(ent), snapTol), lb));
+    const near = bounds.filter((ent) => boxesIntersect(boxExpand(geomBox(ent), snapTol + maxHalf), lb));
     for (let i = 0; i < pts.length; i += 2) {
       const p = { x: pts[i], y: pts[i + 1] };
       let best: Vec | null = null;
@@ -99,11 +122,98 @@ export function findRegion(app: App, world: Vec, gap: number): RegionResult {
       }
     }
     pts.push(pts[0], pts[1]);
-    const simple = simplifyFlat(pts, Math.max(0.01, 0.3 / pxPerMm));
+    const simple = simplifyFlat(pts, Math.max(0.01, 0.3 / f.pxPerMm));
     simple.length -= 2;
     if (simple.length >= 6) loops.push(simple.map((v) => Math.round(v * 1000) / 1000));
   }
+  return loops;
+}
+
+/**
+ * The closed area around a world point, found on a raster of the current view:
+ * the free space around the point is flood-filled, grown back to the line
+ * centres, traced and snapped onto the nearby lines.
+ */
+export function findRegion(app: App, world: Vec, gap: number): RegionResult {
+  const cam = app.cam;
+  const k = Math.min(1, MAX_RASTER / Math.max(app.width, app.height, 1));
+  const [a, b, c, d, e, g] = cam.matrix();
+  const f: Frame = {
+    w: Math.max(8, Math.ceil(app.width * k)),
+    h: Math.max(8, Math.ceil(app.height * k)),
+    m: [a * k, b * k, c * k, d * k, e * k, g * k],
+    pxPerMm: cam.scale * k,
+    view: cam.visibleBox(app.width, app.height),
+  };
+  const r = rasterize(app.doc.visibleEntities(), f, gap);
+  if (!r) return { ok: false, reason: 'open' };
+  const s = toRaster(f, world);
+  const fill = floodFill(r.barrier, f.w, f.h, Math.floor(s.x), Math.floor(s.y));
+  if (!fill.ok) return fill;
+  const loops = vectorize(fill.filled, f, r.bounds, gap, r.maxHalf);
   return loops.length ? { ok: true, loops } : { ok: false, reason: 'open' };
+}
+
+function loopsBox(loops: number[][]): Box {
+  let b = emptyBox();
+  for (const l of loops) for (let i = 0; i < l.length; i += 2) b = boxAddPoint(b, l[i], l[i + 1]);
+  return b;
+}
+
+/**
+ * New outline of an existing hatch after the drawing changed: the areas inside
+ * its old outline are found again on a raster around it. Areas that reach the
+ * old outline are kept (so a line drawn across keeps both halves hatched), areas
+ * enclosed only by new lines – a new hole – are left out. Returns null when the
+ * area is now open (or nothing is left), so the hatch stays as it was.
+ */
+export function refitHatch(entities: () => Iterable<Entity>, hatch: HatchEntity, gap: number): number[][] | null {
+  const ob = loopsBox(hatch.loops);
+  const size = Math.max(ob.maxX - ob.minX, ob.maxY - ob.minY);
+  for (const margin of [Math.max(10, size * 0.3), Math.max(30, size * 1.2)]) {
+    const f = boxFrame(boxExpand(ob, margin));
+    const r = rasterize(entities(), f, gap);
+    if (!r) return null;
+    const comp = labelComponents(r.barrier, f.w, f.h);
+    // Pixels on and inside the old outline.
+    const ctx = newContext(f.w, f.h);
+    if (!ctx) return null;
+    ctx.setTransform(...f.m);
+    ctx.beginPath();
+    for (const l of hatch.loops) {
+      for (let i = 0; i < l.length; i += 2) (i ? ctx.lineTo : ctx.moveTo).call(ctx, l[i], l[i + 1]);
+      ctx.closePath();
+    }
+    ctx.fillStyle = '#f00';
+    ctx.fill('evenodd');
+    ctx.strokeStyle = '#00f';
+    ctx.lineWidth = gap + 4 / f.pxPerMm;
+    ctx.stroke();
+    const img = ctx.getImageData(0, 0, f.w, f.h).data;
+    const inside = new Map<number, number>();
+    const onEdge = new Set<number>();
+    for (let i = 0; i < f.w * f.h; i++) {
+      const lab = comp.labels[i];
+      if (!lab) continue;
+      if (img[i * 4 + 2] > 128) onEdge.add(lab);
+      else if (img[i * 4] > 128) inside.set(lab, (inside.get(lab) ?? 0) + 1);
+    }
+    let keep = [...inside.keys()].filter((lab) => onEdge.has(lab) && (inside.get(lab) ?? 0) > 4);
+    if (!keep.length) {
+      // Fallback: the component covering most of the old area.
+      let best = 0;
+      for (const [lab, n] of inside) if (!best || n > (inside.get(best) ?? 0)) best = lab;
+      if (best) keep = [best];
+    }
+    if (!keep.length) return null;
+    if (keep.some((lab) => comp.border[lab])) continue; // open now: look further out once
+    const set = new Set(keep);
+    const filled = new Uint8Array(f.w * f.h);
+    for (let i = 0; i < f.w * f.h; i++) if (set.has(comp.labels[i])) filled[i] = 1;
+    const loops = vectorize(filled, f, r.bounds, gap, r.maxHalf);
+    return loops.length ? loops : null;
+  }
+  return null;
 }
 
 /**
@@ -157,7 +267,7 @@ export class HatchTool implements Tool {
       return false;
     }
     const width = app.style.pen === 'pencil' ? PENCIL_WIDTHS[0] : INK_WIDTHS[1];
-    const e = app.newEntity<HatchEntity>({ kind: 'hatch', loops: r.loops, pattern: set.hatchPattern, angle: 0, spacing: set.hatchSpacing }, 'H');
+    const e = app.newEntity<HatchEntity>({ kind: 'hatch', loops: r.loops, pattern: set.hatchPattern, angle: 0, spacing: set.hatchSpacing, gap: set.hatchGap }, 'H');
     app.addDrawn({ ...e, style: { ...e.style, width, lineType: 'solid' } });
     return true;
   }

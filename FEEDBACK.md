@@ -18,5 +18,5 @@ Gesammelte Rückmeldungen vom iPad-Test und ihr Stand.
 | 11 | Auswahl auch in ausgeblendete Ebenen verschieben | ✓ (gesperrte weiter nicht) |
 | 12 | Schraffur-Lücken nur 0,5 / 1 mm, Standard 0,5 | ✓ |
 | 13 | Schraffur: offene Stellen rot markieren | offen |
-| 14 | Schraffur passt sich bei neuer Geometrie an | offen |
+| 14 | Schraffur passt sich bei neuer Geometrie an | ✓ neue Bohrungen werden ausgespart, Teilungslinien lassen beide Seiten schraffiert, offene Kontur → Schraffur bleibt |
 | 15 | Normteil-Bibliothek | offen |

@@ -36,7 +36,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 
 **Phase 3**
 
-- Schraffur: in eine geschlossene Fläche tippen; Lücken bis 0,5 / 1,5 / 3 / 6 mm werden überbrückt, Inseln (z. B. Bohrungen) bleiben frei; Muster 45°, −45°, Kreuz, Doppellinie (Stahl), voll/gestrichelt (Kunststoff), Punkte; Abstand 1–5 mm. Antippen einer vorhandenen Schraffur übernimmt Muster und Abstand
+- Schraffur: in eine geschlossene Fläche tippen; Lücken bis 0,5 oder 1 mm werden überbrückt; die Schraffur passt sich an, wenn danach Linien dazukommen oder sich ändern (neue Bohrungen werden ausgespart), Inseln (z. B. Bohrungen) bleiben frei; Muster 45°, −45°, Kreuz, Doppellinie (Stahl), voll/gestrichelt (Kunststoff), Punkte; Abstand 1–5 mm. Antippen einer vorhandenen Schraffur übernimmt Muster und Abstand
 - Bemaßung nach DIN 406: geschlossene Pfeile, Maßzahl über der Maßlinie, von unten oder rechts lesbar
   - Punkt zu Punkt ziehen, dann Maßlinie platzieren (waagerecht, senkrecht oder parallel – je nachdem, wohin man zieht)
   - Linie antippen und Maßlinie platzieren · Kreis antippen → Ø · Bogen antippen → R · zwei Linien antippen → Winkel (der Zeiger wählt den Quadranten)

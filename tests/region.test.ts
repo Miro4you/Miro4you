@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dilate, floodFill, loopArea, traceLoops } from '../src/core/region';
+import { dilate, floodFill, labelComponents, loopArea, traceLoops } from '../src/core/region';
 
 /** Barrier mask from ASCII art: '#' = line. */
 function grid(rows: string[]): { m: Uint8Array; w: number; h: number } {
@@ -53,5 +53,17 @@ describe('region finding', () => {
     m[12] = 1;
     const d = dilate(m, 5, 5, 1);
     expect(d.reduce((a, b) => a + b, 0)).toBe(9);
+  });
+});
+
+describe('components', () => {
+  it('labels areas and marks open ones', () => {
+    const g = grid(['......', '.####.', '.#..#.', '.####.', '......']);
+    const c = labelComponents(g.m, g.w, g.h);
+    expect(c.size.length).toBe(3);
+    const inner = c.labels[2 * g.w + 2];
+    expect(c.size[inner]).toBe(2);
+    expect(c.border[inner]).toBe(false);
+    expect(c.border[c.labels[0]]).toBe(true);
   });
 });

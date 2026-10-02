@@ -36,7 +36,8 @@ export class DeleteTool implements Tool {
     if (st.k !== 'drag') return;
     const R = this.app.hitRadius(ev.pointerType);
     for (const e of this.app.doc.visibleEntities(false)) {
-      if (st.marked.has(e.id)) continue;
+      // Hatch outlines lie on the lines around them: hatches go only when tapped inside.
+      if (st.marked.has(e.id) || e.kind === 'hatch') continue;
       if (capsuleRanges(e, st.last, ev.world, R + e.style.width / 2).length) st.marked.set(e.id, e);
     }
     st.last = ev.world;

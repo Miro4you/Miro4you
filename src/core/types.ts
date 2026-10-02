@@ -76,6 +76,8 @@ export interface HatchEntity extends EntityBase {
   angle: number;
   /** Line spacing in mm. */
   spacing: number;
+  /** Gap tolerance (mm) the area was found with; used when it follows changes. */
+  gap?: number;
 }
 
 /**

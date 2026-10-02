@@ -3,7 +3,7 @@ import { geomBox } from './curves';
 import type { Box } from './geom';
 import type { DocFile, Entity, Layer, ViewState } from './types';
 
-type Change =
+export type Change =
   | { t: 'add'; e: Entity }
   | { t: 'del'; e: Entity }
   | { t: 'upd'; before: Entity; after: Entity }
@@ -148,8 +148,23 @@ export class SketchDocument {
     if (!this.pending) this.pending = [];
   }
 
+  /**
+   * Called when a step is about to be committed, with its changes. Mutations made
+   * in here (e.g. hatches following their outlines) join the same undo step.
+   */
+  beforeCommit: ((changes: readonly Change[]) => void) | null = null;
+  private inHook = false;
+
   commit(): void {
     const changes = this.pending;
+    if (changes && changes.length && this.beforeCommit && !this.inHook) {
+      this.inHook = true;
+      try {
+        this.beforeCommit(changes.slice());
+      } finally {
+        this.inHook = false;
+      }
+    }
     this.pending = null;
     if (!changes || changes.length === 0) return;
     this.undoStack.push(changes);
@@ -161,9 +176,9 @@ export class SketchDocument {
     if (this.pending) {
       this.pending.push(c);
     } else {
-      this.undoStack.push([c]);
-      if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
-      this.redoStack = [];
+      // A single change is a step of its own.
+      this.pending = [c];
+      this.commit();
     }
   }
 
