@@ -61,7 +61,7 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - Bemaßung: Maßzahl ziehen (entlang, nach außen, Abstand der Maßlinie) – Bezugspunkte bleiben stehen; Doppeltippen bearbeitet den Text
 - Nachzeichnen (N): Linien anderer Ebenen antippen oder überwischen → Kopie mit dem aktuellen Stift auf der aktiven Ebene
 - Linienlängen, Radien und Rechteckseiten rasten in 0,5-mm-Schritten (Winkel-Menü: frei / 0,1 / 0,5 / 1 mm); Shift halten oder einen Finger auflegen zeichnet frei – Fangpunkte gehen immer vor
-- Neues App-Icon (Welle mit Mittellinie und Maß) – auf dem iPad das Home-Bildschirm-Symbol einmal entfernen und neu hinzufügen, damit es erscheint
+- Neues App-Icon – auf dem iPad das Home-Bildschirm-Symbol einmal entfernen und neu hinzufügen, damit es erscheint
 
 **Werkzeugleiste (neu sortiert)**
 

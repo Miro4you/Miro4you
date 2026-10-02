@@ -9,7 +9,7 @@ Gesammelte Rückmeldungen vom iPad-Test und ihr Stand.
 | 3 | Bogen immer tangential, Richtung folgt dem Herausziehen, auch mitten auf Linien | ✓ |
 | 3b | Ecken verrunden mit Vorschau | ✓ war schon da (U) |
 | 4 | Bemaßung nachträglich: Doppeltippen = Text, Maßzahl/Maßlinie ziehen, Bezugspunkte bleiben | ✓ |
-| 5 | Neues App-Icon (Welle) | ✓ |
+| 5 | Neues App-Icon | ✓ ersetzt durch das eigene „D“-Icon (Zeichenbrett) |
 | 6 | Schwebender Pencil: Cursorpunkt + Anzeige, was gefangen wird | ✓ |
 | 7 | Mittelpunkte von Linien leichter fangen | ✓ größerer Fangbereich entlang der Linie |
 | 8 | Linienlängen in 0,5-mm-Schritten, außer mit Shift / Finger | ✓ auch Radien und Rechteckseiten; Schrittweite im Winkel-Menü |
