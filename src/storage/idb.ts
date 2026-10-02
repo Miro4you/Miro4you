@@ -1,5 +1,6 @@
 /** Minimal IndexedDB key/value store for autosave. All calls fail soft (resolve undefined / false). */
 
+// Internal names keep the app's first name so saved drawings and settings stay.
 const DB_NAME = 'skizzen-cad';
 const STORE = 'kv';
 

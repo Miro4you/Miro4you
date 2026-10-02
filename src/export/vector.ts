@@ -536,7 +536,7 @@ export function toPdf(rec: VectorRecorder, page: Page, title = 'Skizze'): Uint8A
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pdfNum(W)} ${pdfNum(H)}] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>`,
     `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
-    `<< /Title ${pdfString(title)} /Producer (Skizzen-CAD) >>`,
+    `<< /Title ${pdfString(title)} /Producer (Draftpad) >>`,
   ];
   let pdf = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n';
   const offsets: number[] = [];

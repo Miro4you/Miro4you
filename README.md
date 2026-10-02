@@ -1,4 +1,4 @@
-# Skizzen-CAD
+# Draftpad
 
 Technische Skizzen im Browser – schnell wie auf Papier, sauber wie CAD.
 Primär für das iPad mit Apple Pencil gebaut, funktioniert auch mit Maus und Tastatur.
@@ -126,7 +126,7 @@ Dauerhaft laufen lassen, z. B. mit systemd (`/etc/systemd/system/skizzen-cad.ser
 
 ```ini
 [Unit]
-Description=Skizzen-CAD
+Description=Draftpad
 After=network.target
 
 [Service]

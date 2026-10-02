@@ -1,6 +1,6 @@
 import { loadPref, savePref } from './idb';
 
-/** Connection to the Skizzen-CAD server (server/server.mjs), e.g. on a Raspberry Pi. */
+/** Connection to the Draftpad server (server/server.mjs), e.g. on a Raspberry Pi. */
 export interface CloudConfig {
   /** Server address; empty = the server this app was loaded from. */
   url: string;
@@ -54,7 +54,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    throw new CloudError('Keine Antwort vom Skizzen-CAD-Server', res.status);
+    throw new CloudError('Keine Antwort vom Draftpad-Server', res.status);
   }
   if (!res.ok) throw new CloudError((data as { error?: string })?.error ?? `Fehler ${res.status}`, res.status);
   return data as T;
@@ -62,7 +62,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export async function cloudHealth(): Promise<{ ok: boolean; auth: boolean }> {
   const h = await call<{ ok: boolean; app?: string; auth: boolean }>('/health');
-  if (h?.app !== 'skizzen-cad') throw new CloudError('Kein Skizzen-CAD-Server');
+  if (h?.app !== 'skizzen-cad') throw new CloudError('Kein Draftpad-Server');
   return h;
 }
 

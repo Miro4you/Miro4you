@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 512 512" width="512" height="512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Skizzen-CAD">
+<svg viewBox="0 0 512 512" width="512" height="512" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Draftpad">
 <defs>
 <linearGradient id="td-plate" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#FFFFFF"></stop><stop offset="0.6" stop-color="#F1F4FA"></stop><stop offset="1" stop-color="#DEE4EE"></stop></linearGradient>
 <linearGradient id="td-rim" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#FFFFFF"></stop><stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.35"></stop><stop offset="1" stop-color="#FFFFFF" stop-opacity="0.8"></stop></linearGradient>

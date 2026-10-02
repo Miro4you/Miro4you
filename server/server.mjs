@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Skizzen-CAD server for a home network (e.g. a Raspberry Pi): serves the built
+ * Draftpad server for a home network (e.g. a Raspberry Pi): serves the built
  * app from ../dist and keeps drawings as JSON files in a data folder.
  *
  *   node server/server.mjs            → http://0.0.0.0:8080
@@ -109,7 +109,7 @@ async function api(req, res, path) {
   if (req.method === 'PUT') {
     const body = await readBody(req);
     if (!body || typeof body !== 'object' || !body.doc || body.doc.format !== 'skizzen-cad') {
-      return send(res, 400, { error: 'Keine Skizzen-CAD-Zeichnung' });
+      return send(res, 400, { error: 'Keine Draftpad-Zeichnung' });
     }
     const name = String(body.name || 'Skizze').slice(0, 120);
     const thumb = typeof body.thumb === 'string' && body.thumb.startsWith('data:image/') && body.thumb.length < 200_000 ? body.thumb : undefined;
@@ -164,5 +164,5 @@ createServer(async (req, res) => {
     if (!err.status) console.error(err);
   }
 }).listen(PORT, HOST, () => {
-  console.log(`Skizzen-CAD läuft auf http://${HOST}:${PORT} (Zeichnungen in ${DATA_DIR})${TOKEN ? ' – mit Passwort' : ''}`);
+  console.log(`Draftpad läuft auf http://${HOST}:${PORT} (Zeichnungen in ${DATA_DIR})${TOKEN ? ' – mit Passwort' : ''}`);
 });

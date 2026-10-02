@@ -1,6 +1,6 @@
 {
-  "name": "Skizzen-CAD",
-  "short_name": "Skizze",
+  "name": "Draftpad",
+  "short_name": "Draftpad",
   "description": "Technische Skizzen im Browser – schnell wie auf Papier, sauber wie CAD.",
   "lang": "de",
   "start_url": "./",

@@ -1,4 +1,4 @@
-# Konzept: 2D-Skizzen-CAD im Browser
+# Konzept: 2D-Draftpad im Browser
 
 Ziel: Ein schlankes 2D-Zeichenprogramm im Browser, mit dem man schnell technische
 Skizzen erstellt, die wie echte technische Zeichnungen aussehen.

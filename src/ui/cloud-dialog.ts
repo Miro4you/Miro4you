@@ -48,7 +48,7 @@ function when(iso: string): string {
   return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/** Save to and open from the Skizzen-CAD server (e.g. on the Raspberry Pi). */
+/** Save to and open from the Draftpad server (e.g. on the Raspberry Pi). */
 export function showCloudDialog(app: App): void {
   const { dlg, body, actions } = baseDialog('Online-Ablage');
   dlg.classList.add('cloud-dlg');

@@ -27,7 +27,7 @@ function download(): void {
   const blob = new Blob([data], { type: 'application/json' });
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  const name = `skizze-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.skizze.json`;
+  const name = `draftpad-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.draftpad.json`;
   const a = h('a', { href: URL.createObjectURL(blob), download: name });
   document.body.append(a);
   a.click();
@@ -36,7 +36,7 @@ function download(): void {
   app.toast('Datei heruntergeladen');
 }
 
-const fileInput = h('input', { type: 'file', accept: '.json,.skizze,application/json', style: 'display:none' });
+const fileInput = h('input', { type: 'file', accept: '.json,.draftpad,.skizze,application/json', style: 'display:none' });
 fileInput.addEventListener('change', async () => {
   const file = fileInput.files?.[0];
   fileInput.value = '';

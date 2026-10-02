@@ -381,7 +381,7 @@ function isVec(v: unknown): boolean {
 
 export function validateFile(data: unknown): DocFile {
   const f = data as Partial<DocFile>;
-  if (!f || typeof f !== 'object' || f.format !== 'skizzen-cad') throw new Error('Keine Skizzen-CAD-Datei');
+  if (!f || typeof f !== 'object' || f.format !== 'skizzen-cad') throw new Error('Keine Draftpad-Datei');
   if (f.version !== 1) throw new Error(`Unbekannte Dateiversion ${String(f.version)}`);
   if (!Array.isArray(f.layers) || f.layers.length === 0) throw new Error('Datei enthält keine Ebenen');
   if (!Array.isArray(f.entities)) throw new Error('Datei enthält keine Objekte');

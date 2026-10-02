@@ -32,7 +32,7 @@ function saveBlob(blob: Blob, name: string): void {
 function fileName(format: ExportFormat): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `skizze-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${EXT[format]}`;
+  return `draftpad-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${EXT[format]}`;
 }
 
 const mm = (v: number) => v.toFixed(0);
