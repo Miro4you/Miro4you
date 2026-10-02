@@ -85,7 +85,8 @@ export function moveSelectionToLayer(app: App, layerId: string): void {
   const l = app.doc.layer(layerId);
   // Entities on a hidden or locked layer can't stay selected.
   if (l && (!l.visible || l.locked)) app.setSelection([]);
-  app.toast(`Auf Ebene „${l?.name ?? ''}“ verschoben`);
+  const n = sel.length === 1 ? '1 Objekt' : `${sel.length} Objekte`;
+  app.toast(`${n} nach „${l?.name ?? ''}“ verschoben${l && !l.visible ? ' (ausgeblendet)' : ''}`);
 }
 
 /** Turn a single selected line into a symmetry axis (mirroring on) or back into a plain line. */

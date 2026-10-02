@@ -63,6 +63,10 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 - Linienlängen, Radien und Rechteckseiten rasten in 0,5-mm-Schritten (Winkel-Menü: frei / 0,1 / 0,5 / 1 mm); Shift halten oder einen Finger auflegen zeichnet frei – Fangpunkte gehen immer vor
 - Neues App-Icon (Welle mit Mittellinie und Maß) – auf dem iPad das Home-Bildschirm-Symbol einmal entfernen und neu hinzufügen, damit es erscheint
 
+**Werkzeugleiste (neu sortiert)**
+
+Auswahl · Linie · Formen (Kreis, Rechteck, Bogen, Bogen um Mittelpunkt, Achsenkreuz, Freihand) · Schraffur · Beschriften (Maß, Bezug, Toleranzrahmen, Text) · Löschen (Objekt, Trimmen, Radierer) · Sonderwerkzeuge (Verrunden, Nachzeichnen). Optionen eines Werkzeugs (Glättung, Schrifthöhe, Radius, Schraffurmuster) erscheinen im Gruppenmenü, solange es aktiv ist.
+
 ## Bedienung
 
 | Eingabe | Aktion |

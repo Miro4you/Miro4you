@@ -7,6 +7,9 @@ import { isAnnotation, type Entity, type HatchEntity } from '../core/types';
 import { traceEntity } from '../render/paths';
 import type { Tool, ToolEvent } from './tool';
 
+/** Gap tolerances offered (mm); the first is the default. */
+export const HATCH_GAPS = [0.5, 1] as const;
+
 /** Longest side of the raster used to find the area (CSS px are scaled down beyond this). */
 const MAX_RASTER = 2400;
 

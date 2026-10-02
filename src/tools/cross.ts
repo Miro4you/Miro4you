@@ -13,9 +13,9 @@ const TAP_PX = 3;
 type State = { k: 'idle' } | { k: 'draw'; c: Vec; cHit: SnapHit | null; p: Vec };
 
 /**
- * Axis cross: two perpendicular centre lines through a point, both symmetry axes
- * with mirroring on. Drag from the centre to set arm length and direction, or tap
- * for a default cross.
+ * Axis cross: two perpendicular centre lines through a point (e.g. for a hole).
+ * They don't mirror; a line can be made a symmetry axis from the selection bar.
+ * Drag from the centre to set arm length and direction, or tap for a default cross.
  */
 export class CrossTool implements Tool {
   readonly id = 'cross';
@@ -45,8 +45,6 @@ export class CrossTool implements Tool {
       style,
       a: polar(c, d + 180, arm),
       b: polar(c, d, arm),
-      axis: true,
-      mirror: true,
     });
     return [mk(deg), mk(deg + 90)];
   }
@@ -74,7 +72,7 @@ export class CrossTool implements Tool {
     const p = dist(cam.toScreen(st.c), cam.toScreen(st.p)) < TAP_PX ? { x: st.c.x + DEFAULT_ARM, y: st.c.y } : st.p;
     const [h, v] = this.lines(st.c, p);
     const mk = (l: LineEntity) => {
-      const e = this.app.newEntity<LineEntity>({ kind: 'line', a: l.a, b: l.b, axis: true, mirror: true });
+      const e = this.app.newEntity<LineEntity>({ kind: 'line', a: l.a, b: l.b });
       return { ...e, style: l.style };
     };
     this.app.addDrawn(mk(h), mk(v));

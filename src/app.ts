@@ -22,7 +22,7 @@ import { TextTool } from './tools/text';
 import { TraceTool } from './tools/trace';
 import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
-import { HatchTool } from './tools/hatch';
+import { HATCH_GAPS, HatchTool } from './tools/hatch';
 import { LineTool } from './tools/line';
 import { SelectTool } from './tools/select';
 import type { PointerKind, Tool } from './tools/tool';
@@ -107,7 +107,7 @@ const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   hatchPattern: 'diag',
   hatchSpacing: 2,
-  hatchGap: 1.5,
+  hatchGap: 0.5,
   gpsMode: 'datum',
   filletRadius: 3,
   textSize: 3.5,
@@ -197,6 +197,8 @@ export class App {
       trace: new TraceTool(this),
       text: new TextTool(this),
     };
+    // Gap tolerances that are no longer offered fall back to the smallest one.
+    if (!(HATCH_GAPS as readonly number[]).includes(this.settings.hatchGap)) this.settings.hatchGap = HATCH_GAPS[0];
     const savedTool = loadPref<{ id: ToolId }>('tool', { id: 'line' }).id;
     this.toolId = savedTool in this.tools ? savedTool : 'line';
 

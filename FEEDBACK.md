@@ -13,3 +13,10 @@ Gesammelte Rückmeldungen vom iPad-Test und ihr Stand.
 | 6 | Schwebender Pencil: Cursorpunkt + Anzeige, was gefangen wird | ✓ |
 | 7 | Mittelpunkte von Linien leichter fangen | ✓ größerer Fangbereich entlang der Linie |
 | 8 | Linienlängen in 0,5-mm-Schritten, außer mit Shift / Finger | ✓ auch Radien und Rechteckseiten; Schrittweite im Winkel-Menü |
+| 9 | Werkzeugleiste: Linie eigener Button; Formen (Kreis, Rechteck, Bogen, Bogen um Mittelpunkt, Achsenkreuz, Freihand); Schraffur eigene Gruppe; Beschriften; Löschen; Sonderwerkzeuge (Verrunden, Nachzeichnen) | ✓ |
+| 10 | Achsenkreuz ohne automatische Spiegelung | ✓ normale Mittellinien |
+| 11 | Auswahl auch in ausgeblendete Ebenen verschieben | ✓ (gesperrte weiter nicht) |
+| 12 | Schraffur-Lücken nur 0,5 / 1 mm, Standard 0,5 | ✓ |
+| 13 | Schraffur: offene Stellen rot markieren | offen |
+| 14 | Schraffur passt sich bei neuer Geometrie an | offen |
+| 15 | Normteil-Bibliothek | offen |

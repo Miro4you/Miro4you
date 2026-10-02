@@ -2,6 +2,7 @@ import type { App, ToolId } from '../app';
 import { formatWidth, HARDNESSES, INK_WIDTHS, LINE_TYPES, PEN_NAMES, PENCIL_WIDTHS } from '../core/pens';
 import type { Hardness, HatchPattern, LineType, PenKind } from '../core/types';
 import { HATCH_NAMES } from '../render/annotations';
+import { HATCH_GAPS } from '../tools/hatch';
 import { loadPref, savePref } from '../storage/idb';
 import { icons, lineTypeIcon } from './icons';
 import { h } from './dom';
@@ -32,17 +33,6 @@ const LINE_DASH: Record<LineType, string> = {
 };
 
 
-type ShapeId = 'line' | 'rect' | 'circle' | 'arc' | 'arc-center' | 'cross';
-type AnnoId = 'hatch' | 'dim' | 'datum' | 'gtol' | 'text';
-
-const ANNOS: { id: AnnoId; title: string; icon: string }[] = [
-  { id: 'hatch', title: 'Schraffur: in geschlossene Fläche tippen (H)', icon: icons.hatch },
-  { id: 'dim', title: 'Bemaßung: von Punkt zu Punkt ziehen oder Element antippen (D)', icon: icons.dimension },
-  { id: 'datum', title: 'Bezug (A, B, …): auf Kante drücken und wegziehen (P)', icon: icons.datum },
-  { id: 'gtol', title: 'Form- und Lagetoleranz: auf Element drücken und Rahmen wegziehen (P)', icon: icons.gtol },
-  { id: 'text', title: 'Text: Startpunkt antippen, vorhandenen Text antippen zum Ändern (W)', icon: icons.text },
-];
-
 /** Tiny preview of a hatch pattern. */
 function hatchIcon(p: HatchPattern): string {
   const lines: Record<HatchPattern, string> = {
@@ -55,44 +45,170 @@ function hatchIcon(p: HatchPattern): string {
   };
   return `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="1.5" stroke-width="1.1" opacity=".55"/>${lines[p]}</svg>`;
 }
-type EraseId = 'delete' | 'trim' | 'erase' | 'fillet' | 'trace';
+/** One tool in a palette group. */
+interface GroupItem {
+  id: string;
+  title: string;
+  icon: string;
+  pick: (app: App) => void;
+  active: (app: App) => boolean;
+}
 
-const SHAPES: { id: ShapeId; tool: ToolId; title: string; icon: string }[] = [
-  { id: 'line', tool: 'line', title: 'Linie (L)', icon: icons.line },
-  { id: 'rect', tool: 'rect', title: 'Rechteck: von Ecke zu Ecke (Q)', icon: icons.rect },
-  { id: 'circle', tool: 'circle', title: 'Kreis: Mittelpunkt, dann Radius (C)', icon: icons.circle },
-  { id: 'arc', tool: 'arc', title: 'Bogen: losziehen in Startrichtung – auf Linien tangential, vor- oder rückwärts (B)', icon: icons.arc },
-  { id: 'arc-center', tool: 'arc', title: 'Bogen um Mittelpunkt', icon: icons.arcCenter },
-  { id: 'cross', tool: 'cross', title: 'Achsenkreuz: Mittelpunkt, dann Armlänge (K)', icon: icons.cross },
+/** Option section of a group's flyout, shown only while `when` holds. */
+interface GroupOptions {
+  el: HTMLElement;
+  when: (app: App) => boolean;
+}
+
+const tool = (id: ToolId, title: string, icon: string): GroupItem => ({
+  id,
+  title,
+  icon,
+  pick: (app) => app.setTool(id),
+  active: (app) => app.toolId === id,
+});
+
+const SHAPES: GroupItem[] = [
+  tool('circle', 'Kreis: Mittelpunkt, dann Radius (C)', icons.circle),
+  tool('rect', 'Rechteck: von Ecke zu Ecke (Q)', icons.rect),
+  {
+    id: 'arc',
+    title: 'Bogen: losziehen in Startrichtung – auf Linien tangential, vor- oder rückwärts (B)',
+    icon: icons.arc,
+    pick: (app) => {
+      app.updateSettings({ arcMode: 'auto' });
+      app.setTool('arc');
+    },
+    active: (app) => app.toolId === 'arc' && app.settings.arcMode !== 'center',
+  },
+  {
+    id: 'arc-center',
+    title: 'Bogen um Mittelpunkt',
+    icon: icons.arcCenter,
+    pick: (app) => {
+      app.updateSettings({ arcMode: 'center' });
+      app.setTool('arc');
+    },
+    active: (app) => app.toolId === 'arc' && app.settings.arcMode === 'center',
+  },
+  tool('cross', 'Achsenkreuz (Mittellinien): Mittelpunkt, dann Armlänge (K)', icons.cross),
+  tool('freehand', 'Freihand mit Glättungsschnur (F)', icons.freehand),
 ];
-const ERASERS: { id: EraseId; title: string; icon: string }[] = [
-  { id: 'delete', title: 'Objekt löschen: antippen oder drüberwischen (X)', icon: icons.deleteObj },
-  { id: 'trim', title: 'Trimmen bis zum nächsten Schnittpunkt (T)', icon: icons.trim },
-  { id: 'erase', title: 'Radierer (E)', icon: icons.eraser },
-  { id: 'fillet', title: 'Ecken verrunden: an die Ecke tippen, oder ziehen für den Radius (U)', icon: icons.fillet },
-  { id: 'trace', title: 'Nachzeichnen: Linien anderer Ebenen antippen oder überwischen – mit dem aktuellen Stift auf die aktive Ebene (N)', icon: icons.trace },
+
+const gps = (mode: 'datum' | 'gtol', title: string, icon: string): GroupItem => ({
+  id: mode,
+  title,
+  icon,
+  pick: (app) => {
+    app.updateSettings({ gpsMode: mode });
+    app.setTool('gps');
+  },
+  active: (app) => app.toolId === 'gps' && app.settings.gpsMode === mode,
+});
+
+const ANNOS: GroupItem[] = [
+  tool('dim', 'Bemaßung: von Punkt zu Punkt ziehen oder Element antippen (D)', icons.dimension),
+  gps('datum', 'Bezug (A, B, …): auf Kante drücken und wegziehen (P)', icons.datum),
+  gps('gtol', 'Form- und Lagetoleranz: auf Element drücken und Rahmen wegziehen (P)', icons.gtol),
+  tool('text', 'Text: Startpunkt antippen, vorhandenen Text antippen zum Ändern (W)', icons.text),
 ];
+
+const ERASERS: GroupItem[] = [
+  tool('delete', 'Objekt löschen: antippen oder drüberwischen (X)', icons.deleteObj),
+  tool('trim', 'Trimmen bis zum nächsten Schnittpunkt (T)', icons.trim),
+  tool('erase', 'Radierer (E)', icons.eraser),
+];
+
+const SPECIALS: GroupItem[] = [
+  tool('fillet', 'Ecken verrunden: an die Ecke tippen, oder ziehen für den Radius (U)', icons.fillet),
+  tool('trace', 'Nachzeichnen: Linien anderer Ebenen antippen oder überwischen – mit dem aktuellen Stift auf die aktive Ebene (N)', icons.trace),
+];
+
+/**
+ * A palette button for a group of tools. Its icon shows the active (or last
+ * used) tool; tapping it picks that tool, tapping again – or hovering, or a long
+ * press – opens the group with its tools and the options of the active one.
+ */
+class ToolGroup {
+  readonly btn: HTMLButtonElement;
+  readonly fly: Flyout;
+  private itemBtns = new Map<string, HTMLButtonElement>();
+  private last: string;
+
+  constructor(
+    private app: App,
+    private key: string,
+    title: string,
+    private list: GroupItem[],
+    private options: GroupOptions[],
+    side: () => 'above' | 'right',
+  ) {
+    const saved = loadPref<{ id: string }>(`group.${key}`, { id: list[0].id }).id;
+    this.last = list.some((i) => i.id === saved) ? saved : list[0].id;
+    this.btn = h('button', { class: 'btn tool', title, 'aria-label': title });
+    const content: HTMLElement[] = [];
+    if (list.length > 1) {
+      const row = h('div', { class: 'fly-tools' });
+      for (const it of list) {
+        const b = h('button', { class: 'btn fly-item', title: it.title, 'aria-label': it.title, html: it.icon, 'data-item': '1' });
+        b.addEventListener('click', () => {
+          this.pick(it);
+          this.fly.close();
+        });
+        this.itemBtns.set(it.id, b);
+        row.append(b);
+      }
+      content.push(row);
+    }
+    for (const o of options) content.push(o.el);
+    this.fly = new Flyout(content, side, options.length ? 'fly-wide' : 'fly-row');
+    this.fly.attach(this.btn, () => {
+      if (this.activeItem()) this.fly.toggle(this.btn);
+      else this.pick(this.list.find((i) => i.id === this.last) ?? this.list[0]);
+    });
+  }
+
+  activeItem(): GroupItem | undefined {
+    return this.list.find((i) => i.active(this.app));
+  }
+
+  pick(it: GroupItem): void {
+    it.pick(this.app);
+    this.last = it.id;
+    savePref(`group.${this.key}`, { id: it.id });
+  }
+
+  update(): void {
+    const act = this.activeItem();
+    const shown = act ?? this.list.find((i) => i.id === this.last) ?? this.list[0];
+    if (this.btn.dataset.icon !== shown.id) {
+      this.btn.innerHTML = shown.icon;
+      this.btn.dataset.icon = shown.id;
+    }
+    this.btn.classList.toggle('active', !!act);
+    for (const [id, b] of this.itemBtns) b.classList.toggle('active', id === act?.id);
+    let changed = false;
+    for (const o of this.options) {
+      const hide = !o.when(this.app);
+      if (o.el.hidden !== hide) {
+        o.el.hidden = hide;
+        changed = true;
+      }
+    }
+    if (changed) this.fly.reposition();
+  }
+}
 
 /** Floating, draggable tool palette with pop-out groups. */
 export class Palette {
   readonly el: HTMLElement;
   private prefs: PalettePrefs = loadPref<PalettePrefs>('palette', { x: null, y: null, orient: 'h', collapsed: false });
   private selectBtn: HTMLButtonElement;
-  private freeBtn: HTMLButtonElement;
-  private shapeBtn: HTMLButtonElement;
-  private eraseBtn: HTMLButtonElement;
-  private annoBtn: HTMLButtonElement;
-  private annoItems = new Map<AnnoId, HTMLButtonElement>();
-  /** Hatch options, shown only while the hatch tool is active. */
-  private hatchOpts!: HTMLElement;
-  private textOpts!: HTMLElement;
-  private filletOpts!: HTMLElement;
-  private eraseFly!: Flyout;
+  private drawLineBtn: HTMLButtonElement;
+  private groups: ToolGroup[] = [];
   private radiusItems = new Map<number, HTMLButtonElement>();
   private textSizeItems = new Map<number, HTMLButtonElement>();
-  private annoFly!: Flyout;
   private hatchItems = new Map<string, HTMLButtonElement>();
-  private lastAnno: AnnoId = loadPref<{ id: AnnoId }>('lastAnno', { id: 'dim' }).id;
   private penBtn: HTMLButtonElement;
   private lineBtn: HTMLButtonElement;
   private colorBtn: HTMLButtonElement;
@@ -102,10 +218,6 @@ export class Palette {
   private redoBtn: HTMLButtonElement;
   private colors: ColorPopover;
   private flyouts: Flyout[] = [];
-  private lastShape: ShapeId = loadPref<{ id: ShapeId }>('lastShape', { id: 'line' }).id;
-  private lastErase: EraseId = loadPref<{ id: EraseId }>('lastErase', { id: 'trim' }).id;
-  private shapeItems = new Map<ShapeId, HTMLButtonElement>();
-  private eraseItems = new Map<EraseId, HTMLButtonElement>();
   private penItems: HTMLButtonElement[] = [];
   private hardItems = new Map<Hardness, HTMLButtonElement>();
   private lineItems = new Map<LineType, HTMLButtonElement>();
@@ -126,87 +238,30 @@ export class Palette {
       return b;
     };
 
-    // Selection and freehand (with smoothing options).
+    // Selection and line: always one tap away.
     this.selectBtn = btn('Auswahl (V)', icons.select);
     this.selectBtn.addEventListener('click', () => app.setTool('select'));
-    this.freeBtn = btn('Freihand (F) · nochmal tippen: Glättung', icons.freehand);
+    this.drawLineBtn = btn('Linie (L)', icons.line);
+    this.drawLineBtn.addEventListener('click', () => app.setTool('line'));
+
+    // Shapes (freehand smoothing shows while freehand is active).
     this.stabilizer = h('input', { type: 'range', min: '0', max: '60', step: '2', id: 'stabilizer', 'aria-label': 'Glättung' });
     this.stabilizerValue = h('span', { class: 'range-value' });
     this.stabilizer.addEventListener('input', () => app.updateSettings({ stabilizer: Number(this.stabilizer.value) }));
-    const freeFly = new Flyout(
-      [
-        h('div', { class: 'fly-title', text: 'Glättung (Schnur)' }),
-        h('div', { class: 'range-row' }, [this.stabilizer, this.stabilizerValue]),
-        h('div', { class: 'fly-hint', text: 'Die Linie folgt dem Stift an einer Schnur – ruhige Wellen, z. B. für Bruchkanten.' }),
-      ],
-      side,
-      'fly-wide',
-    );
-    freeFly.attach(this.freeBtn, () => {
-      if (app.toolId === 'freehand') freeFly.toggle(this.freeBtn);
-      else app.setTool('freehand');
-    });
-
-    // Shapes group.
-    this.shapeBtn = btn('Formen: Linie, Rechteck, Kreis, Bogen, Achsenkreuz', icons.line);
-    const shapeFly: Flyout = new Flyout(
-      SHAPES.map((s) => {
-        const b = item(s.title, s.icon, () => this.pickShape(s.id), () => shapeFly);
-        this.shapeItems.set(s.id, b);
-        return b;
-      }),
-      side,
-      'fly-row',
-    );
-    shapeFly.attach(this.shapeBtn, () => {
-      if (SHAPES.some((s) => s.tool === app.toolId)) shapeFly.toggle(this.shapeBtn);
-      else this.pickShape(this.lastShape);
-    });
-
-    // Erase group.
-    this.eraseBtn = btn('Ändern: Objekt löschen, Trimmen, Radierer, Verrunden, Nachzeichnen', icons.trim);
-    const eraseRow = h('div', { class: 'fly-tools' });
-    const eraseFly: Flyout = new Flyout([eraseRow], side, 'fly-wide');
-    this.eraseFly = eraseFly;
-    for (const t of ERASERS) {
-      const b = item(t.title, t.icon, () => this.pickErase(t.id), () => eraseFly);
-      this.eraseItems.set(t.id, b);
-      eraseRow.append(b);
-    }
-    const radRow = h('div', { class: 'seg' });
-    for (const r of [0, 1, 2, 3, 5, 10]) {
-      const b = h('button', { class: 'seg-btn', text: r === 0 ? 'Ecke' : `R${r}`, title: r === 0 ? 'Scharfe Ecke (Linien kürzen/verlängern)' : `Radius ${r} mm`, 'data-item': '1' });
-      b.addEventListener('click', () => app.updateSettings({ filletRadius: r }));
-      this.radiusItems.set(r, b);
-      radRow.append(b);
-    }
-    this.filletOpts = h('div', { class: 'fly-section' }, [
-      h('div', { class: 'fly-title', text: 'Radius' }),
-      radRow,
-      h('div', { class: 'fly-hint', text: 'Oder an der Ecke drücken und ziehen – der Radius folgt dem Stift.' }),
+    const freeOpts = h('div', { class: 'fly-section' }, [
+      h('div', { class: 'fly-title', text: 'Glättung (Schnur)' }),
+      h('div', { class: 'range-row' }, [this.stabilizer, this.stabilizerValue]),
+      h('div', { class: 'fly-hint', text: 'Die Linie folgt dem Stift an einer Schnur – ruhige Wellen, z. B. für Bruchkanten.' }),
     ]);
-    eraseFly.el.append(this.filletOpts);
-    eraseFly.attach(this.eraseBtn, () => {
-      if (ERASERS.some((s) => s.id === app.toolId)) eraseFly.toggle(this.eraseBtn);
-      else this.pickErase(this.lastErase);
-    });
+    const shapes = new ToolGroup(app, 'shapes', 'Formen: Kreis, Rechteck, Bogen, Achsenkreuz, Freihand', SHAPES, [{ el: freeOpts, when: (a) => a.toolId === 'freehand' }], side);
 
-    // Annotation group: hatch, dimension, GPS symbols (+ hatch options).
-    this.annoBtn = btn('Beschriften: Schraffur, Bemaßung, GPS-Symbole, Text', icons.dimension);
-    const toolRow = h('div', { class: 'fly-tools' });
-    const annoFly: Flyout = new Flyout([toolRow], side, 'fly-wide');
-    this.annoFly = annoFly;
-    for (const a of ANNOS) {
-      const b = item(a.title, a.icon, () => this.pickAnno(a.id), () => annoFly);
-      this.annoItems.set(a.id, b);
-      toolRow.append(b);
-    }
+    // Hatching with its options.
     const patRow = h('div', { class: 'seg seg-icons' });
     for (const p of Object.keys(HATCH_NAMES) as HatchPattern[]) {
       const b = h('button', { class: 'seg-btn', title: HATCH_NAMES[p], 'aria-label': HATCH_NAMES[p], html: hatchIcon(p), 'data-item': '1' });
       b.addEventListener('click', () => {
         app.updateSettings({ hatchPattern: p });
-        this.pickAnno('hatch');
+        app.setTool('hatch');
       });
       this.hatchItems.set(`p:${p}`, b);
       patRow.append(b);
@@ -216,18 +271,37 @@ export class Palette {
       const b = h('button', { class: 'seg-btn', text: `${sp} mm`, 'data-item': '1' });
       b.addEventListener('click', () => {
         app.updateSettings({ hatchSpacing: sp });
-        this.pickAnno('hatch');
+        app.setTool('hatch');
       });
       this.hatchItems.set(`s:${sp}`, b);
       spaceRow.append(b);
     }
     const gapRow = h('div', { class: 'seg' });
-    for (const g of [0.5, 1.5, 3, 6]) {
+    for (const g of HATCH_GAPS) {
       const b = h('button', { class: 'seg-btn', text: `${String(g).replace('.', ',')} mm`, 'data-item': '1' });
       b.addEventListener('click', () => app.updateSettings({ hatchGap: g }));
       this.hatchItems.set(`g:${g}`, b);
       gapRow.append(b);
     }
+    const hatchOpts = h('div', { class: 'fly-section' }, [
+      h('div', { class: 'fly-title', text: 'Muster' }),
+      patRow,
+      h('div', { class: 'fly-title', text: 'Abstand' }),
+      spaceRow,
+      h('div', { class: 'fly-title', text: 'Lücken schließen bis' }),
+      gapRow,
+      h('div', { class: 'fly-hint', text: 'Antippen einer vorhandenen Schraffur übernimmt Muster und Abstand.' }),
+    ]);
+    const hatch = new ToolGroup(
+      app,
+      'hatch',
+      'Schraffur: in geschlossene Fläche tippen (H) · nochmal tippen: Muster',
+      [tool('hatch', 'Schraffur', icons.hatch)],
+      [{ el: hatchOpts, when: () => true }],
+      side,
+    );
+
+    // Annotations (text size while the text tool is active).
     const sizeRow = h('div', { class: 'seg' });
     for (const sz of [2.5, 3.5, 5, 7, 10]) {
       const b = h('button', { class: 'seg-btn', text: String(sz).replace('.', ','), title: `Schrifthöhe ${String(sz).replace('.', ',')} mm`, 'data-item': '1' });
@@ -235,22 +309,27 @@ export class Palette {
       this.textSizeItems.set(sz, b);
       sizeRow.append(b);
     }
-    this.textOpts = h('div', { class: 'fly-section' }, [h('div', { class: 'fly-title', text: 'Schrifthöhe (mm)' }), sizeRow]);
-    this.hatchOpts = h('div', { class: 'fly-section' });
-    annoFly.el.append(this.textOpts, this.hatchOpts);
-    this.hatchOpts.append(
-      h('div', { class: 'fly-title', text: 'Schraffur' }),
-      patRow,
-      h('div', { class: 'fly-title', text: 'Abstand' }),
-      spaceRow,
-      h('div', { class: 'fly-title', text: 'Lücken schließen bis' }),
-      gapRow,
-      h('div', { class: 'fly-hint', text: 'Antippen einer vorhandenen Schraffur übernimmt Muster und Abstand.' }),
-    );
-    annoFly.attach(this.annoBtn, () => {
-      if (this.activeAnno() !== null) annoFly.toggle(this.annoBtn);
-      else this.pickAnno(this.lastAnno);
-    });
+    const textOpts = h('div', { class: 'fly-section' }, [h('div', { class: 'fly-title', text: 'Schrifthöhe (mm)' }), sizeRow]);
+    const annos = new ToolGroup(app, 'annos', 'Beschriften: Bemaßung, Bezug, Toleranzrahmen, Text', ANNOS, [{ el: textOpts, when: (a) => a.toolId === 'text' }], side);
+
+    // Erasing.
+    const erasers = new ToolGroup(app, 'erasers', 'Löschen: Objekt, Trimmen, Radierer', ERASERS, [], side);
+
+    // Special tools (fillet radius while filleting).
+    const radRow = h('div', { class: 'seg' });
+    for (const r of [0, 1, 2, 3, 5, 10]) {
+      const b = h('button', { class: 'seg-btn', text: r === 0 ? 'Ecke' : `R${r}`, title: r === 0 ? 'Scharfe Ecke (Linien kürzen/verlängern)' : `Radius ${r} mm`, 'data-item': '1' });
+      b.addEventListener('click', () => app.updateSettings({ filletRadius: r }));
+      this.radiusItems.set(r, b);
+      radRow.append(b);
+    }
+    const filletOpts = h('div', { class: 'fly-section' }, [
+      h('div', { class: 'fly-title', text: 'Radius' }),
+      radRow,
+      h('div', { class: 'fly-hint', text: 'Oder an der Ecke drücken und ziehen – der Radius folgt dem Stift.' }),
+    ]);
+    const specials = new ToolGroup(app, 'specials', 'Sonderwerkzeuge: Ecken verrunden, Nachzeichnen', SPECIALS, [{ el: filletOpts, when: (a) => a.toolId === 'fillet' }], side);
+    this.groups = [shapes, hatch, annos, erasers, specials];
 
     // Pens.
     this.penBtn = h('button', { class: 'chip pen-trigger', title: 'Stift wählen (1–9)', 'aria-label': 'Stift' });
@@ -348,7 +427,7 @@ export class Palette {
     this.undoBtn.addEventListener('click', () => app.undo());
     this.redoBtn.addEventListener('click', () => app.redo());
 
-    this.flyouts = [freeFly, shapeFly, eraseFly, annoFly, penFly, lineFly, angleFly];
+    this.flyouts = [...this.groups.map((g) => g.fly), penFly, lineFly, angleFly];
 
     const grip = h('div', { class: 'grip', title: 'Ziehen zum Verschieben · Doppeltippen: quer/hoch', html: icons.grip });
     const collapse = h('button', { class: 'btn collapse', title: 'Einklappen' });
@@ -361,7 +440,7 @@ export class Palette {
     const group = (...els: HTMLElement[]) => h('div', { class: 'group' }, els);
     const sep = () => h('div', { class: 'sep' });
     const body = h('div', { class: 'pal-body' }, [
-      group(this.selectBtn, this.freeBtn, this.shapeBtn, this.annoBtn, this.eraseBtn),
+      group(this.selectBtn, this.drawLineBtn, ...this.groups.map((g) => g.btn)),
       sep(),
       group(this.penBtn, this.lineBtn, this.colorBtn),
       sep(),
@@ -393,38 +472,6 @@ export class Palette {
     return h('span', { class: `dot ${pen}`, style: `width:${size}px;height:${size}px` });
   }
 
-  private pickShape(id: ShapeId): void {
-    const s = SHAPES.find((x) => x.id === id)!;
-    if (s.tool === 'arc') this.app.updateSettings({ arcMode: id === 'arc-center' ? 'center' : 'auto' });
-    this.app.setTool(s.tool);
-    this.lastShape = id;
-    savePref('lastShape', { id });
-  }
-
-  /** Active annotation tool, if any. */
-  private activeAnno(): AnnoId | null {
-    const t = this.app.toolId;
-    if (t === 'hatch' || t === 'dim' || t === 'text') return t;
-    if (t === 'gps') return this.app.settings.gpsMode;
-    return null;
-  }
-
-  private pickAnno(id: AnnoId): void {
-    if (id === 'datum' || id === 'gtol') {
-      this.app.updateSettings({ gpsMode: id });
-      this.app.setTool('gps');
-    } else this.app.setTool(id);
-    this.lastAnno = id;
-    savePref('lastAnno', { id });
-    this.update();
-  }
-
-  private pickErase(id: EraseId): void {
-    this.app.setTool(id);
-    this.lastErase = id;
-    savePref('lastErase', { id });
-  }
-
   private selectPen(i: number): void {
     const p = ALL_PENS[i];
     if (p) this.app.setStyle({ pen: p.pen, width: p.width });
@@ -433,32 +480,9 @@ export class Palette {
   update(): void {
     const { style, settings, toolId, doc } = this.app;
     this.selectBtn.classList.toggle('active', toolId === 'select');
-    this.freeBtn.classList.toggle('active', toolId === 'freehand');
-    // Shape group shows the active (or last used) shape.
-    const shape: ShapeId =
-      toolId === 'arc' ? (settings.arcMode === 'center' ? 'arc-center' : 'arc') : SHAPES.some((s) => s.id === toolId) ? (toolId as ShapeId) : this.lastShape;
-    this.shapeBtn.innerHTML = SHAPES.find((s) => s.id === shape)!.icon;
-    this.shapeBtn.classList.toggle('active', SHAPES.some((s) => s.tool === toolId));
-    for (const [id, b] of this.shapeItems) b.classList.toggle('active', id === shape && SHAPES.some((s) => s.tool === toolId));
-    const erase: EraseId = ERASERS.some((e) => e.id === toolId) ? (toolId as EraseId) : this.lastErase;
-    this.eraseBtn.innerHTML = ERASERS.find((e) => e.id === erase)!.icon;
-    this.eraseBtn.classList.toggle('active', ERASERS.some((e) => e.id === toolId));
-    for (const [id, b] of this.eraseItems) b.classList.toggle('active', id === toolId);
-
-    const anno = this.activeAnno();
-    this.annoBtn.innerHTML = ANNOS.find((a) => a.id === (anno ?? this.lastAnno))!.icon;
-    this.annoBtn.classList.toggle('active', anno !== null);
-    for (const [id, b] of this.annoItems) b.classList.toggle('active', id === anno);
-    if (this.hatchOpts.hidden !== (anno !== 'hatch') || this.textOpts.hidden !== (anno !== 'text')) {
-      this.hatchOpts.hidden = anno !== 'hatch';
-      this.textOpts.hidden = anno !== 'text';
-      this.annoFly.reposition();
-    }
+    this.drawLineBtn.classList.toggle('active', toolId === 'line');
+    for (const g of this.groups) g.update();
     for (const [sz, b] of this.textSizeItems) b.classList.toggle('active', sz === settings.textSize);
-    if (this.filletOpts.hidden !== (toolId !== 'fillet')) {
-      this.filletOpts.hidden = toolId !== 'fillet';
-      this.eraseFly.reposition();
-    }
     for (const [r, b] of this.radiusItems) b.classList.toggle('active', r === settings.filletRadius);
     for (const [k, b] of this.hatchItems) {
       b.classList.toggle('active', k === `p:${settings.hatchPattern}` || k === `s:${settings.hatchSpacing}` || k === `g:${settings.hatchGap}`);

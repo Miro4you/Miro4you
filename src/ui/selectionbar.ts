@@ -61,8 +61,8 @@ export class SelectionBar {
     if (this.layerMenu.classList.toggle('open')) {
       this.layerMenu.replaceChildren(
         ...[...this.app.doc.layers].reverse().map((l) => {
-          const b = h('button', { class: 'menu-item', text: l.name + (l.locked ? ' (gesperrt)' : '') });
-          b.disabled = l.locked || !l.visible;
+          const b = h('button', { class: 'menu-item', text: l.name + (l.locked ? ' (gesperrt)' : !l.visible ? ' (ausgeblendet)' : '') });
+          b.disabled = l.locked;
           b.addEventListener('click', () => {
             this.layerMenu.classList.remove('open');
             moveSelectionToLayer(this.app, l.id);
