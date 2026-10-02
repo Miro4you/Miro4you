@@ -20,6 +20,8 @@ import { FilletTool } from './tools/fillet';
 import { RectTool } from './tools/rect';
 import { TextTool } from './tools/text';
 import { TraceTool } from './tools/trace';
+import { PartTool } from './tools/part';
+import type { PartSpec } from './core/parts';
 import { GpsTool } from './tools/gps';
 import { FreehandTool } from './tools/freehand';
 import { HATCH_GAPS, HatchTool, isBoundary, refitHatch } from './tools/hatch';
@@ -44,7 +46,8 @@ export type ToolId =
   | 'hatch'
   | 'dim'
   | 'gps'
-  | 'text';
+  | 'text'
+  | 'part';
 
 export interface Settings {
   grid: boolean;
@@ -79,6 +82,8 @@ export interface Settings {
   textSize: number;
   /** Lengths of new lines (and radii, rectangle sides) go in these steps (mm, 0 = free). */
   lengthStep: number;
+  /** Standard part placed by the parts tool. */
+  part: PartSpec;
 }
 
 /** With the angle snap off, lines still settle onto 0°/45°/90°… when this close (degrees). */
@@ -112,6 +117,7 @@ const DEFAULT_SETTINGS: Settings = {
   filletRadius: 3,
   textSize: 3.5,
   lengthStep: 0.5,
+  part: { kind: 'socketScrew', size: 'M8', view: 'side', length: 30 },
 };
 
 /**
@@ -195,6 +201,7 @@ export class App {
       rect: new RectTool(this),
       fillet: new FilletTool(this),
       trace: new TraceTool(this),
+      part: new PartTool(this),
       text: new TextTool(this),
     };
     this.doc.beforeCommit = (changes) => this.refitHatches(changes);

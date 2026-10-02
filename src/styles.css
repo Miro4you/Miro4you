@@ -1373,3 +1373,65 @@ dialog.cloud-dlg {
   justify-content: flex-end;
   margin-top: 8px;
 }
+
+dialog.part-dlg {
+  width: min(520px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin-top: max(12px, env(safe-area-inset-top));
+  overflow: auto;
+}
+
+.part-kinds {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.part-kind {
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--field);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.part-kind.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.seg.seg-wrap {
+  flex-wrap: wrap;
+}
+
+.seg.seg-wrap .seg-btn {
+  flex: 0 0 auto;
+  min-width: 44px;
+}
+
+canvas.part-preview {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 120px;
+  margin-top: 10px;
+  border-radius: 10px;
+  background: var(--field);
+  touch-action: auto;
+}
+
+p.part-label {
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+.part-current {
+  font-size: 12.5px;
+  font-weight: 600;
+}

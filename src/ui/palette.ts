@@ -3,6 +3,8 @@ import { formatWidth, HARDNESSES, INK_WIDTHS, LINE_TYPES, PEN_NAMES, PENCIL_WIDT
 import type { Hardness, HatchPattern, LineType, PenKind } from '../core/types';
 import { HATCH_NAMES } from '../render/annotations';
 import { HATCH_GAPS } from '../tools/hatch';
+import { partLabel } from '../core/parts';
+import { askPart } from './part-dialog';
 import { loadPref, savePref } from '../storage/idb';
 import { icons, lineTypeIcon } from './icons';
 import { h } from './dom';
@@ -122,7 +124,22 @@ const ERASERS: GroupItem[] = [
 const SPECIALS: GroupItem[] = [
   tool('fillet', 'Ecken verrunden: an die Ecke tippen, oder ziehen für den Radius (U)', icons.fillet),
   tool('trace', 'Nachzeichnen: Linien anderer Ebenen antippen oder überwischen – mit dem aktuellen Stift auf die aktive Ebene (N)', icons.trace),
+  {
+    id: 'part',
+    title: 'Normteile: Bohrungen, Schrauben, Muttern, Kugellager, Sicherungsring-Nuten (I)',
+    icon: icons.part,
+    pick: (app) => void choosePart(app),
+    active: (app) => app.toolId === 'part',
+  },
 ];
+
+/** Pick a standard part, then place it. */
+export async function choosePart(app: App): Promise<void> {
+  const spec = await askPart(app.settings.part);
+  if (!spec) return;
+  app.updateSettings({ part: spec });
+  app.setTool('part');
+}
 
 /**
  * A palette button for a group of tools. Its icon shows the active (or last
@@ -209,6 +226,7 @@ export class Palette {
   private radiusItems = new Map<number, HTMLButtonElement>();
   private textSizeItems = new Map<number, HTMLButtonElement>();
   private hatchItems = new Map<string, HTMLButtonElement>();
+  private partLabel!: HTMLElement;
   private penBtn: HTMLButtonElement;
   private lineBtn: HTMLButtonElement;
   private colorBtn: HTMLButtonElement;
@@ -328,7 +346,26 @@ export class Palette {
       radRow,
       h('div', { class: 'fly-hint', text: 'Oder an der Ecke drücken und ziehen – der Radius folgt dem Stift.' }),
     ]);
-    const specials = new ToolGroup(app, 'specials', 'Sonderwerkzeuge: Ecken verrunden, Nachzeichnen', SPECIALS, [{ el: filletOpts, when: (a) => a.toolId === 'fillet' }], side);
+    this.partLabel = h('div', { class: 'part-current' });
+    const partBtn = h('button', { class: 'dlg-btn', text: 'Anderes Teil …', 'data-item': '1' });
+    partBtn.addEventListener('click', () => void choosePart(app));
+    const partOpts = h('div', { class: 'fly-section' }, [
+      h('div', { class: 'fly-title', text: 'Normteil' }),
+      this.partLabel,
+      partBtn,
+      h('div', { class: 'fly-hint', text: 'Antippen setzt das Teil, Drücken und Ziehen dreht es vorher in die Zugrichtung.' }),
+    ]);
+    const specials = new ToolGroup(
+      app,
+      'specials',
+      'Sonderwerkzeuge: Ecken verrunden, Nachzeichnen, Normteile',
+      SPECIALS,
+      [
+        { el: filletOpts, when: (a) => a.toolId === 'fillet' },
+        { el: partOpts, when: (a) => a.toolId === 'part' },
+      ],
+      side,
+    );
     this.groups = [shapes, hatch, annos, erasers, specials];
 
     // Pens.
@@ -484,6 +521,7 @@ export class Palette {
     for (const g of this.groups) g.update();
     for (const [sz, b] of this.textSizeItems) b.classList.toggle('active', sz === settings.textSize);
     for (const [r, b] of this.radiusItems) b.classList.toggle('active', r === settings.filletRadius);
+    this.partLabel.textContent = partLabel(settings.part);
     for (const [k, b] of this.hatchItems) {
       b.classList.toggle('active', k === `p:${settings.hatchPattern}` || k === `s:${settings.hatchSpacing}` || k === `g:${settings.hatchGap}`);
     }

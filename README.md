@@ -67,6 +67,10 @@ Das vollständige Konzept und der Phasenplan stehen in [CONCEPT.md](CONCEPT.md).
 
 Auswahl · Linie · Formen (Kreis, Rechteck, Bogen, Bogen um Mittelpunkt, Achsenkreuz, Freihand) · Schraffur · Beschriften (Maß, Bezug, Toleranzrahmen, Text) · Löschen (Objekt, Trimmen, Radierer) · Sonderwerkzeuge (Verrunden, Nachzeichnen). Optionen eines Werkzeugs (Glättung, Schrifthöhe, Radius, Schraffurmuster) erscheinen im Gruppenmenü, solange es aktiv ist.
 
+**Normteile (Taste I, Gruppe Sonderwerkzeuge)**
+
+Durchgangsbohrung (ISO 273), Gewindebohrung, Zylinderschraube ISO 4762, Sechskantschraube ISO 4017, Sechskantmutter ISO 4032, Rillenkugellager DIN 625 (60xx/62xx), Nuten für Sicherungsringe DIN 471/472 – jeweils mit Größe, Ansicht (Seite/Schnitt oder Draufsicht) und Länge bzw. Tiefe. Das Teil folgt dem Stift und rastet an Mittelpunkten und Linien; Antippen setzt es, Drücken und Ziehen dreht es vorher. Eingefügt werden normale Linien, Kreise und Bögen. Die Maße stammen aus den üblichen Normtabellen – für kritische Maße bitte das Normblatt prüfen.
+
 ## Bedienung
 
 | Eingabe | Aktion |
@@ -83,7 +87,7 @@ Auswahl · Linie · Formen (Kreis, Rechteck, Bogen, Bogen um Mittelpunkt, Achsen
 | K | Achsenkreuz |
 | X · T · E | Objekt löschen · Trimmen · Radierer |
 | H · D · P | Schraffur · Bemaßung · GPS-Symbol |
-| Q · U · W · N | Rechteck · Ecken verrunden · Text · Nachzeichnen |
+| Q · U · W · N · I | Rechteck · Ecken verrunden · Text · Nachzeichnen · Normteil |
 | Entf · ⌘D · ⌘A · Pfeile | Auswahl löschen · duplizieren · alles wählen · verschieben |
 | 1–4 / 5–9 | Bleistift- / Tuschestärken |
 | ⇧1–⇧5 | Linienart |

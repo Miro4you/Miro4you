@@ -483,6 +483,9 @@ export class InputController {
       case 'n':
         app.setTool('trace');
         break;
+      case 'i':
+        document.dispatchEvent(new CustomEvent('app:part'));
+        break;
       case 'd':
         app.setTool('dim');
         break;

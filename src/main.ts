@@ -4,7 +4,7 @@ import { InputController } from './input/input';
 import { helpDialog, LayersPanel, Menu, Toast, ViewBar } from './ui/chrome';
 import { h } from './ui/dom';
 import { ask } from './ui/dialogs';
-import { Palette } from './ui/palette';
+import { choosePart, Palette } from './ui/palette';
 import { SelectionBar } from './ui/selectionbar';
 import { showExportDialog } from './ui/export-dialog';
 import { editSheet } from './ui/sheet-dialog';
@@ -85,6 +85,7 @@ async function newDrawing(): Promise<void> {
 
 document.addEventListener('app:download', download);
 document.addEventListener('app:export', () => showExportDialog(app));
+document.addEventListener('app:part', () => void choosePart(app));
 document.addEventListener('app:open', open);
 
 // ---- UI -------------------------------------------------------------------------------

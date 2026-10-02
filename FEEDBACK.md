@@ -19,4 +19,4 @@ Gesammelte Rückmeldungen vom iPad-Test und ihr Stand.
 | 12 | Schraffur-Lücken nur 0,5 / 1 mm, Standard 0,5 | ✓ |
 | 13 | Schraffur: offene Stellen rot markieren | offen |
 | 14 | Schraffur passt sich bei neuer Geometrie an | ✓ neue Bohrungen werden ausgespart, Teilungslinien lassen beide Seiten schraffiert, offene Kontur → Schraffur bleibt |
-| 15 | Normteil-Bibliothek | offen |
+| 15 | Normteil-Bibliothek | ✓ Durchgangs- und Gewindebohrung, Zylinder- und Sechskantschraube, Mutter, Rillenkugellager, Sicherungsring-Nuten (Taste I, Sonderwerkzeuge) |
